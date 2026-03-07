@@ -38,18 +38,25 @@ const SUGGESTED=[
   {title:"עזרה בבישול",icon:"🥘",weight:9,cat:"מטבח"},{title:"שטיפת כלים ביד",icon:"🫗",weight:7,cat:"מטבח"},
   {title:"הכנת תיק",icon:"🎒",weight:5,cat:"לימודים"},{title:"עזרה בגינה",icon:"🌿",weight:8,cat:"אחר"},
 ];
+const PENALTIES=[
+  {id:"p1",title:"קללות",icon:"🤬",xp:5},
+  {id:"p2",title:"אלימות",icon:"👊",xp:15},
+  {id:"p3",title:"אי פינוי כלים",icon:"🍽️",xp:10},
+  {id:"p4",title:"אי פינוי בגדים",icon:"👕",xp:10},
+  {id:"p5",title:"התגרות בהורים/אחים",icon:"😤",xp:10},
+];
 const INIT_TASKS=[
-  {id:"t1",title:"העמסת מדיח",icon:"🍽️",weight:12,assignedTo:["peleg","yahav","yahel"],bonus:false},
-  {id:"t2",title:"פינוי מדיח",icon:"🫧",weight:10,assignedTo:["peleg","yahav","yahel"],bonus:false},
-  {id:"t3",title:"הורדת זבל",icon:"🗑️",weight:8,assignedTo:["peleg","yahav"],bonus:false},
-  {id:"t4",title:"סידור החדר",icon:"🛏️",weight:12,assignedTo:["peleg","yahav","yahel"],bonus:false},
-  {id:"t5",title:"הכנת שיעורים",icon:"📚",weight:15,assignedTo:["peleg","yahav","yahel"],bonus:false},
-  {id:"t6",title:"ניקוי שולחן",icon:"🪑",weight:6,assignedTo:["peleg","yahav","yahel"],bonus:false},
-  {id:"t7",title:"קיפול כביסה",icon:"👕",weight:10,assignedTo:["peleg","yahav"],bonus:false},
-  {id:"t8",title:"שאיבת אבק",icon:"🧹",weight:9,assignedTo:["peleg","yahav"],bonus:false},
-  {id:"t9",title:"טיפול בחיות",icon:"🐕",weight:8,assignedTo:["yahel"],bonus:false},
-  {id:"t10",title:"הצעת מיטה",icon:"🛌",weight:5,assignedTo:["peleg","yahav","yahel"],bonus:false},
-  {id:"t11",title:"סידור נעליים",icon:"👟",weight:5,assignedTo:["peleg","yahav","yahel"],bonus:false},
+  {id:"t1",title:"העמסת מדיח",icon:"🍽️",weight:12,assignedTo:["peleg","yahav","yahel"],bonus:false,type:"shared"},
+  {id:"t2",title:"פינוי מדיח",icon:"🫧",weight:10,assignedTo:["peleg","yahav","yahel"],bonus:false,type:"shared"},
+  {id:"t3",title:"הורדת זבל",icon:"🗑️",weight:8,assignedTo:["peleg","yahav"],bonus:false,type:"shared"},
+  {id:"t4",title:"סידור החדר",icon:"🛏️",weight:12,assignedTo:["peleg","yahav","yahel"],bonus:false,type:"personal"},
+  {id:"t5",title:"הכנת שיעורים",icon:"📚",weight:15,assignedTo:["peleg","yahav","yahel"],bonus:false,type:"personal"},
+  {id:"t6",title:"ניקוי שולחן",icon:"🪑",weight:6,assignedTo:["peleg","yahav","yahel"],bonus:false,type:"shared"},
+  {id:"t7",title:"קיפול כביסה",icon:"👕",weight:10,assignedTo:["peleg","yahav"],bonus:false,type:"shared"},
+  {id:"t8",title:"שאיבת אבק",icon:"🧹",weight:9,assignedTo:["peleg","yahav"],bonus:false,type:"shared"},
+  {id:"t9",title:"טיפול בחיות",icon:"🐕",weight:8,assignedTo:["yahel"],bonus:false,type:"personal"},
+  {id:"t10",title:"הצעת מיטה",icon:"🛌",weight:5,assignedTo:["peleg","yahav","yahel"],bonus:false,type:"personal"},
+  {id:"t11",title:"סידור נעליים",icon:"👟",weight:5,assignedTo:["peleg","yahav","yahel"],bonus:false,type:"personal"},
 ];
 const DEFAULT_GOALS=[
   {id:"g1",title:"שבוע מושלם",emoji:"🏆",desc:"כל הילדים מעל 90%",target:90,reward:"פיצה משפחתית 🍕",active:true},
@@ -112,7 +119,7 @@ export default function App(){
   const[manageSub,setManageSub]=useState("tasks");
   const[editTask,setEditTask]=useState(null);
   const[weightEdit,setWeightEdit]=useState(null);
-  const[newTask,setNewTask]=useState({title:"",icon:"✨",weight:5,assignedTo:[]});
+  const[newTask,setNewTask]=useState({title:"",icon:"✨",weight:5,assignedTo:[],type:"personal"});
   const[notifChild,setNotifChild]=useState(null);
   const[bonusModal,setBonusModal]=useState(false);
   const[bonusTitle,setBonusTitle]=useState("");
@@ -140,6 +147,9 @@ export default function App(){
   const[praiseModal,setPraiseModal]=useState(null);
   const[praiseText,setPraiseText]=useState("");
   const[praiseStar,setPraiseStar]=useState("⭐");
+  // Penalties
+  const[penalties,setPenalties]=useState([]);
+  const[penaltyModal,setPenaltyModal]=useState(null);
 
   const fileRef=useRef(null);
   const bonusFileRef=useRef(null);
@@ -149,20 +159,27 @@ export default function App(){
     if(d.tasks)setTasks(d.tasks);if(d.completions)setCompletions(d.completions);if(d.pins)setPins(d.pins);
     if(d.xp)setXp(d.xp);if(d.streaks)setStreaks(d.streaks);if(d.goals)setGoals(d.goals);
     if(d.swaps)setSwaps(d.swaps);if(d.activeReminders)setActiveReminders(d.activeReminders);
-    if(d.messages)setMessages(d.messages);
+    if(d.messages)setMessages(d.messages);if(d.penalties)setPenalties(d.penalties);
   }}catch{}})();},[]);
 
   const save=useCallback(async(overrides={})=>{try{await storage.set("chores-v5",JSON.stringify({
     tasks:overrides.tasks||tasks,completions:overrides.completions||completions,pins:overrides.pins||pins,
     xp:overrides.xp||xp,streaks:overrides.streaks||streaks,goals:overrides.goals||goals,
     swaps:overrides.swaps||swaps,activeReminders:overrides.activeReminders||activeReminders,
-    messages:overrides.messages||messages,
-  }));}catch{}},[tasks,completions,pins,xp,streaks,goals,swaps,activeReminders,messages]);
+    messages:overrides.messages||messages,penalties:overrides.penalties||penalties,
+  }));}catch{}},[tasks,completions,pins,xp,streaks,goals,swaps,activeReminders,messages,penalties]);
 
   const flash=(m)=>{setToast(m);setTimeout(()=>setToast(null),2200);};
   const cKey=(tid,cid,day)=>`${wk}_${tid}_${cid}_${day}`;
   const isP=user&&FAMILY[user]?.role==="parent";
-  const getChildW=(cid)=>tasks.filter(t=>t.assignedTo.includes(cid)&&!t.bonus).reduce((s,t)=>s+t.weight,0);
+  // Rotation: for shared tasks, only one child per day
+  const isTaskForChild=(task,cid,day)=>{
+    if(!task.assignedTo.includes(cid))return false;
+    if(task.bonus)return true;
+    if(task.type==="shared"){const kids=task.assignedTo;return kids[(typeof day==="number"?day:new Date(day).getDay())%kids.length]===cid;}
+    return true;
+  };
+  const getChildW=(cid)=>tasks.filter(t=>isTaskForChild(t,cid,selDay)&&!t.bonus).reduce((s,t)=>s+t.weight,0);
 
   const getLevel=(cid)=>{const x=xp[cid]||0;let lv=LEVELS[0];for(const l of LEVELS)if(x>=l.min)lv=l;return lv;};
   const getNextLevel=(cid)=>{const x=xp[cid]||0;for(const l of LEVELS)if(x<l.min)return l;return null;};
@@ -183,7 +200,7 @@ export default function App(){
     const nc={...completions,[k]:{done:true,photo:photo||null,approved:false,approvedBy:null,ts:Date.now()}};
     setCompletions(nc);
     // Check if all tasks done today
-    const allToday=tasks.filter(t=>t.assignedTo.includes(cid)&&!t.bonus);
+    const allToday=tasks.filter(t=>isTaskForChild(t,cid,day)&&!t.bonus);
     const allDone=allToday.every(t=>{const kk=t.id===tid?k:cKey(t.id,cid,day);return nc[kk]?.done;});
     if(allDone){setShowConfetti(true);setTimeout(()=>setShowConfetti(false),3000);}
     save({completions:nc});flash("✅ בוצע!");
@@ -198,7 +215,7 @@ export default function App(){
     const newXp=addXp(cid,xpGain);
     // Update streak
     const today=getToday();
-    const allToday=tasks.filter(t=>t.assignedTo.includes(cid)&&!t.bonus);
+    const allToday=tasks.filter(t=>isTaskForChild(t,cid,today)&&!t.bonus);
     const allApproved=allToday.every(t=>{const kk=cKey(t.id,cid,today);return(t.id===tid?nc:completions)[kk]?.approved||nc[kk]?.approved;});
     let newStreaks=streaks;
     if(allApproved){newStreaks={...streaks,[cid]:(streaks[cid]||0)+1};setStreaks(newStreaks);}
@@ -209,7 +226,7 @@ export default function App(){
 
   const getWeekStats=(cid)=>{
     const tw=getChildW(cid);let aW=0,dW=0,tW=0,dc=0,ac=0,tc=0,bonusA=0;
-    for(let d=0;d<7;d++){tasks.forEach(t=>{if(!t.assignedTo.includes(cid))return;
+    for(let d=0;d<7;d++){tasks.forEach(t=>{if(!isTaskForChild(t,cid,d))return;
       if(t.bonus){const k=cKey(t.id,cid,d);if(completions[k]?.approved)bonusA+=t.weight;return;}
       tW+=t.weight;tc++;const k=cKey(t.id,cid,d);const c=completions[k];
       if(c?.done){dW+=t.weight;dc++;if(c?.approved){aW+=t.weight;ac++;}}});}
@@ -228,7 +245,7 @@ export default function App(){
 
   const getTodayPctForChild=(cid)=>{
     const today=getToday();
-    const todayTasks=tasks.filter(t=>t.assignedTo.includes(cid)&&!t.bonus);
+    const todayTasks=tasks.filter(t=>isTaskForChild(t,cid,today)&&!t.bonus);
     if(todayTasks.length===0)return 100;
     const done=todayTasks.filter(t=>completions[cKey(t.id,cid,today)]?.done).length;
     return Math.round((done/todayTasks.length)*100);
@@ -269,10 +286,10 @@ export default function App(){
   };
 
   const addNewTask=()=>{if(!newTask.title||newTask.assignedTo.length===0){flash("⚠️ חסרים פרטים");return;}
-    const nt=[...tasks,{...newTask,id:"t"+Date.now(),bonus:false}];setTasks(nt);save({tasks:nt});
-    setNewTask({title:"",icon:"✨",weight:5,assignedTo:[]});flash("✨ נוספה!");};
+    const nt=[...tasks,{...newTask,id:"t"+Date.now(),bonus:false,type:newTask.type||"personal"}];setTasks(nt);save({tasks:nt});
+    setNewTask({title:"",icon:"✨",weight:5,assignedTo:[],type:"personal"});flash("✨ נוספה!");};
   const addSuggested=(s)=>{if(tasks.find(t=>t.title===s.title)){flash("⚠️ קיימת");return;}
-    const nt=[...tasks,{id:"t"+Date.now(),title:s.title,icon:s.icon,weight:s.weight,assignedTo:[...CH],bonus:false}];
+    const nt=[...tasks,{id:"t"+Date.now(),title:s.title,icon:s.icon,weight:s.weight,assignedTo:[...CH],bonus:false,type:"personal"}];
     setTasks(nt);save({tasks:nt});flash(`✨ ${s.title} נוספה!`);};
   const deleteTask=(tid)=>{const nt=tasks.filter(t=>t.id!==tid);setTasks(nt);save({tasks:nt});flash("🗑️");};
   const updateTask=(tid,u)=>{const nt=tasks.map(t=>t.id===tid?{...t,...u}:t);setTasks(nt);save({tasks:nt});};
@@ -292,6 +309,16 @@ export default function App(){
     if(praiseText.trim()||praiseStar){const nm=[...messages,{id:"msg_"+Date.now(),from:user,to:childId,taskId,text:praiseText.trim(),star:praiseStar,ts:Date.now()}];
       setMessages(nm);save({messages:nm});}
     setPraiseModal(null);setPraiseText("");};
+
+  const addPenalty=(childId,penaltyId)=>{
+    const p=PENALTIES.find(x=>x.id===penaltyId);if(!p)return;
+    const newXp={...xp,[childId]:Math.max(0,(xp[childId]||0)-p.xp)};setXp(newXp);
+    const np=[...penalties,{id:"pen_"+Date.now(),childId,penaltyId,by:user,ts:Date.now()}];
+    setPenalties(np);
+    const nm=[...messages,{id:"msg_"+Date.now(),from:user,to:childId,text:`⚠️ הופחתו ${p.xp} נקודות - ${p.title}`,star:"⚠️",ts:Date.now()}];
+    setMessages(nm);
+    save({xp:newXp,penalties:np,messages:nm});flash(`⚠️ -${p.xp}XP`);setPenaltyModal(null);
+  };
 
   const verifyPin=(uid,pin)=>{const correct=pins[uid]||DEFAULT_PINS[uid];
     if(pin===correct){setUser(uid);setPinScreen(null);setPinInput("");setPinError(false);setScreen("home");}
@@ -383,7 +410,7 @@ export default function App(){
               <span style={{fontSize:22}}>{activeReminder.emoji}</span>
               <div style={{flex:1}}>
                 <div style={{fontSize:13,fontWeight:700,color:"#f59e0b"}}>⏰ תזכורת {activeReminder.label}</div>
-                <div style={{fontSize:11,color:"#fbbf24"}}>{tasks.filter(t=>t.assignedTo.includes(user)&&!t.bonus&&!completions[cKey(t.id,user,today)]?.done).length} משימות ממתינות</div>
+                <div style={{fontSize:11,color:"#fbbf24"}}>{tasks.filter(t=>isTaskForChild(t,user,today)&&!t.bonus&&!completions[cKey(t.id,user,today)]?.done).length} משימות ממתינות</div>
               </div>
               <button onClick={()=>setReminderShown({...reminderShown,[activeReminder.id+selDay]:true})} style={{background:"none",border:"none",color:"#f59e0b",cursor:"pointer",fontSize:16}}>✕</button>
             </div>
@@ -426,7 +453,7 @@ export default function App(){
           {/* Child: personal stats card */}
           {!isP&&(()=>{
             const st=getWeekStats(user);const lv=getLevel(user);const nxt=getNextLevel(user);
-            const todayTasks=tasks.filter(t=>t.assignedTo.includes(user)&&!t.bonus);
+            const todayTasks=tasks.filter(t=>isTaskForChild(t,user,today)&&!t.bonus);
             const todayDone=todayTasks.filter(t=>completions[cKey(t.id,user,today)]?.done).length;
             return(
               <>
@@ -452,7 +479,7 @@ export default function App(){
                 <div style={{background:"#ffffff",borderRadius:14,padding:14,marginBottom:10,border:"1px solid #e2e8f0"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                     <span style={{fontSize:13,fontWeight:700,color:"#1e293b"}}>📋 היום</span>
-                    <span style={{fontSize:12,fontWeight:700,color:todayDone===todayTasks.length?"#10b981":"#f8fafc"}}>{todayDone}/{todayTasks.length}</span>
+                    <span style={{fontSize:12,fontWeight:700,color:todayDone===todayTasks.length?"#10b981":"#64748b"}}>{todayDone}/{todayTasks.length}</span>
                   </div>
                   <div style={{height:8,background:"#f1f5f9",borderRadius:6,overflow:"hidden",marginBottom:8}}>
                     <div style={{height:"100%",width:`${todayTasks.length>0?Math.round((todayDone/todayTasks.length)*100):0}%`,background:todayDone===todayTasks.length?"linear-gradient(90deg,#10b981,#059669)":"linear-gradient(90deg,#f59e0b,#f97316)",borderRadius:6,transition:"width 0.5s"}}/>
@@ -504,6 +531,7 @@ export default function App(){
                         </div>
                         <div style={{fontSize:10,color:"#64748b"}}>היום: {todayPct}% • שבוע: {st.pct}% {m.weeklyPay>0?`• ${st.earned}₪`:""}  </div>
                       </div>
+                      <button onClick={()=>setPenaltyModal({childId:cid})} style={{width:30,height:30,background:"#ef444415",border:"1px solid #ef444430",borderRadius:8,color:"#ef4444",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",marginLeft:4}}>⚠️</button>
                       <div style={{width:36,height:36,borderRadius:18,border:`3px solid ${todayPct===100?"#10b981":todayPct>50?m.color:"#e2e8f0"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:"#1e293b"}}>{todayPct}%</div>
                     </div>
                   </div>
@@ -566,8 +594,8 @@ export default function App(){
             </button>)}
           </div>
           {(isP?CH:[user]).filter(c=>FAMILY[c]).map(cid=>{
-            const m=FAMILY[cid];const dt=tasks.filter(t=>t.assignedTo.includes(cid)&&!t.bonus);
-            const bt=tasks.filter(t=>t.assignedTo.includes(cid)&&t.bonus);
+            const m=FAMILY[cid];const dt=tasks.filter(t=>isTaskForChild(t,cid,selDay)&&!t.bonus);
+            const bt=tasks.filter(t=>isTaskForChild(t,cid,selDay)&&t.bonus);
             const dw=dt.reduce((s,t)=>s+t.weight,0);if(dt.length===0&&bt.length===0)return null;
             const dc=dt.filter(t=>completions[cKey(t.id,cid,selDay)]?.done).length;
             return(
@@ -584,6 +612,7 @@ export default function App(){
                           <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
                             <span style={{fontSize:12,fontWeight:700,color:"#1e293b"}}>{task.title}</span>
                             <span style={S.wt}>{task.weight}נק׳ {wpct}%</span>
+                            {task.type==="shared"&&<span style={{fontSize:7,fontWeight:700,color:"#8b5cf6",background:"#8b5cf615",padding:"1px 5px",borderRadius:5}}>📋 תורנות</span>}
                           </div>
                           <div style={{fontSize:9,marginTop:1}}>
                             {appd?<span style={{color:"#10b981"}}>✅ {FAMILY[comp.approvedBy]?.name}</span>
@@ -638,7 +667,7 @@ export default function App(){
               </div>
               {m.weeklyPay>0&&<div style={{background:"linear-gradient(135deg,#10b981,#059669)",borderRadius:10,padding:"8px 12px",textAlign:"center"}}>
                 <div style={{fontSize:16,fontWeight:800,color:"#fff"}}>{st.earned}₪</div>
-                <div style={{fontSize:7,color:"#059669"}}>מתוך {m.weeklyPay}₪</div>
+                <div style={{fontSize:7,color:"#d1fae5"}}>מתוך {m.weeklyPay}₪</div>
               </div>}
             </div>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
@@ -648,7 +677,7 @@ export default function App(){
               <span style={{fontSize:11,fontWeight:700,color:"#94a3b8"}}>{st.pct}%</span>
             </div>
             <div style={{display:"flex",gap:4}}>
-              {[{n:st.tc,l:"סה״כ",c:"#f8fafc"},{n:st.dc,l:"בוצעו",c:"#f59e0b"},{n:st.ac,l:"אושרו",c:"#10b981"},{n:st.tc-st.dc,l:"חסרים",c:"#ef4444"}].map((s,i)=>(
+              {[{n:st.tc,l:"סה״כ",c:"#1e293b"},{n:st.dc,l:"בוצעו",c:"#f59e0b"},{n:st.ac,l:"אושרו",c:"#10b981"},{n:st.tc-st.dc,l:"חסרים",c:"#ef4444"}].map((s,i)=>(
                 <div key={i} style={{flex:1,background:"#f1f5f9",borderRadius:7,padding:"5px 2px",textAlign:"center"}}>
                   <div style={{fontSize:13,fontWeight:800,color:s.c}}>{s.n}</div><div style={{fontSize:7,color:"#64748b"}}>{s.l}</div>
                 </div>
@@ -725,7 +754,7 @@ export default function App(){
               <div style={{display:"flex",alignItems:"center",gap:6}}>
                 <span style={{fontSize:16}}>{t.icon}</span>
                 <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:"#1e293b"}}>{t.title}</div>
-                  <div style={{fontSize:9,color:"#64748b"}}>{t.weight}נק׳ • {t.assignedTo.map(c=>FAMILY[c]?.name).join(", ")}</div></div>
+                  <div style={{fontSize:9,color:"#64748b"}}>{t.weight}נק׳ • {t.assignedTo.map(c=>FAMILY[c]?.name).join(", ")} {t.type==="shared"?"• 📋 רוטציה":""}</div></div>
                 <button onClick={()=>setEditTask(t.id)} style={S.eBtn}>✏️</button>
                 <button onClick={()=>deleteTask(t.id)} style={S.dBtn}>🗑</button>
               </div>
@@ -751,6 +780,12 @@ export default function App(){
             <div style={{display:"flex",gap:3,marginBottom:10}}>
               {CH.map(c=><button key={c} onClick={()=>{const a=newTask.assignedTo.includes(c)?newTask.assignedTo.filter(x=>x!==c):[...newTask.assignedTo,c];setNewTask({...newTask,assignedTo:a});}}
                 style={{...S.chip,...(newTask.assignedTo.includes(c)?{background:FAMILY[c].color+"20",borderColor:FAMILY[c].color,color:FAMILY[c].color}:{})}}>{FAMILY[c].name}</button>)}
+            </div>
+            <div style={{display:"flex",gap:4,marginBottom:10}}>
+              {[{v:"personal",l:"🏠 אישי"},{v:"shared",l:"📋 משפחתי (רוטציה)"}].map(opt=>(
+                <button key={opt.v} onClick={()=>setNewTask({...newTask,type:opt.v})}
+                  style={{flex:1,padding:"6px 4px",background:newTask.type===opt.v?"#6366f120":"#f8fafc",border:newTask.type===opt.v?"2px solid #6366f1":"1px solid #e2e8f0",borderRadius:8,color:newTask.type===opt.v?"#6366f1":"#64748b",fontSize:10,fontWeight:600,cursor:"pointer"}}>{opt.l}</button>
+              ))}
             </div>
             <button onClick={addNewTask} style={{width:"100%",padding:10,background:"linear-gradient(135deg,#4f46e5,#6366f1)",border:"none",borderRadius:10,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>✨ הוסף</button>
           </div>
@@ -919,6 +954,29 @@ export default function App(){
               ✅ בלי תמונה
             </button>
             <button onClick={()=>setDoneConfirm(null)} style={S.mc}>ביטול</button>
+          </div>
+        </div>
+      )}
+
+      {/* PENALTY MODAL */}
+      {penaltyModal&&(
+        <div style={S.ov} onClick={()=>setPenaltyModal(null)}>
+          <div style={S.md} onClick={e=>e.stopPropagation()}>
+            <h3 style={S.mt}>⚠️ הורדת נקודות - {FAMILY[penaltyModal.childId]?.name}</h3>
+            <p style={{color:"#64748b",fontSize:11,textAlign:"center",margin:"0 0 10px"}}>בחר/י סיבה:</p>
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {PENALTIES.map(p=>(
+                <button key={p.id} onClick={()=>addPenalty(penaltyModal.childId,p.id)}
+                  style={{padding:12,background:"#fff5f5",border:"1px solid #ef444430",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:10,textAlign:"right"}}>
+                  <span style={{fontSize:22}}>{p.icon}</span>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12,fontWeight:700,color:"#1e293b"}}>{p.title}</div>
+                    <div style={{fontSize:10,color:"#ef4444"}}>-{p.xp} XP</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <button onClick={()=>setPenaltyModal(null)} style={{...S.mc,marginTop:8}}>ביטול</button>
           </div>
         </div>
       )}
