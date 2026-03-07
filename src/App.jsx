@@ -13,8 +13,11 @@ const FAMILY={
 };
 const CH=["peleg","yahav","yahel"];
 const LEVELS=[
-  {name:"מתחיל",emoji:"🌱",min:0},{name:"חרוץ",emoji:"⭐",min:50},{name:"מצטיין",emoji:"🔥",min:150},
-  {name:"גיבור",emoji:"💪",min:350},{name:"אלוף",emoji:"🏆",min:600},{name:"אגדה",emoji:"👑",min:1000},
+  {name:"מתחיל",emoji:"🌱",min:0},{name:"חרוץ",emoji:"💪",min:100},{name:"מסודר",emoji:"📋",min:250},
+  {name:"אחראי",emoji:"🎯",min:500},{name:"כוכב",emoji:"⭐",min:800},{name:"גיבור",emoji:"🦸",min:1200},
+  {name:"מקצוען",emoji:"🏅",min:1700},{name:"מאסטר",emoji:"🎓",min:2300},{name:"מומחה",emoji:"💎",min:3000},
+  {name:"אלוף",emoji:"🏆",min:4000},{name:"נינג'ה",emoji:"🥷",min:5200},{name:"סופר-סטאר",emoji:"🌟",min:6500},
+  {name:"מלך/מלכה",emoji:"👑",min:8000},{name:"אגדה",emoji:"🐉",min:10000},{name:"אלוף העולם",emoji:"🌍",min:13000},
 ];
 const REMINDERS=[
   {id:"morning",label:"בוקר",time:"07:30",emoji:"🌅"},
@@ -45,6 +48,19 @@ const PENALTIES=[
   {id:"p4",title:"אי פינוי בגדים",icon:"👕",xp:10},
   {id:"p5",title:"התגרות בהורים/אחים",icon:"😤",xp:10},
 ];
+const DEFAULT_BADGES=[
+  {id:"b1",title:"יום ראשון!",emoji:"🎉",condition:"chores_completed",value:1,desc:"סיימת משימה ראשונה!"},
+  {id:"b2",title:"שבוע מושלם",emoji:"🌟",condition:"streak_days",value:7,desc:"7 ימי רצף!"},
+  {id:"b3",title:"סופר סטריק",emoji:"🔥",condition:"streak_days",value:30,desc:"30 ימים רצופים!"},
+  {id:"b4",title:"מאה משימות",emoji:"💯",condition:"chores_completed",value:100,desc:"100 משימות!"},
+  {id:"b5",title:"חמש מאות",emoji:"🚀",condition:"chores_completed",value:500,desc:"500 משימות!!"},
+  {id:"b6",title:"עשיר",emoji:"💰",condition:"total_xp_earned",value:1000,desc:"צברת 1000 נקודות"},
+  {id:"b7",title:"המנקה הגדול",emoji:"🧹",condition:"chores_completed",value:50,desc:"50 משימות!"},
+  {id:"b8",title:"שף מתחיל",emoji:"👨‍🍳",condition:"chores_completed",value:20,desc:"20 משימות!"},
+  {id:"b9",title:"ירוק",emoji:"🌿",condition:"chores_completed",value:10,desc:"10 משימות!"},
+  {id:"b10",title:"תלמיד חכם",emoji:"📚",condition:"chores_completed",value:30,desc:"30 משימות!"},
+];
+const EXAM_BONUSES=[{min:100,bonus:100,label:"ציון 100!"},{min:90,bonus:50,label:"ציון 90+"}];
 const INIT_TASKS=[
   {id:"t1",title:"העמסת מדיח",icon:"🍽️",weight:12,assignedTo:["peleg","yahav","yahel"],bonus:false,type:"shared"},
   {id:"t2",title:"פינוי מדיח",icon:"🫧",weight:10,assignedTo:["peleg","yahav","yahel"],bonus:false,type:"shared"},
@@ -104,6 +120,18 @@ function LevelUp({show,level}){
   );
 }
 
+function BadgeEarned({show,badge}){
+  if(!show||!badge)return null;
+  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2002}}>
+    <div style={{textAlign:"center",animation:"levelPop 0.5s ease"}}>
+      <div style={{fontSize:72,marginBottom:8,animation:"levelBounce 1s ease infinite"}}>{badge.emoji}</div>
+      <div style={{fontSize:20,fontWeight:800,color:"#f59e0b",marginBottom:4}}>תג חדש!</div>
+      <div style={{fontSize:16,color:"#e2e8f0"}}>{badge.title}</div>
+      <div style={{fontSize:12,color:"#94a3b8",marginTop:4}}>{badge.desc}</div>
+    </div>
+  </div>);
+}
+
 export default function App(){
   const[user,setUser]=useState(null);
   const[screen,setScreen]=useState("login");
@@ -150,6 +178,15 @@ export default function App(){
   // Penalties
   const[penalties,setPenalties]=useState([]);
   const[penaltyModal,setPenaltyModal]=useState(null);
+  // Badges & Gamification
+  const[earnedBadges,setEarnedBadges]=useState({peleg:[],yahav:[],yahel:[]});
+  const[badgeNotification,setBadgeNotification]=useState(null);
+  const[totalXpEarned,setTotalXpEarned]=useState({peleg:0,yahav:0,yahel:0});
+  const[approvedCount,setApprovedCount]=useState({peleg:0,yahav:0,yahel:0});
+  // Exams
+  const[exams,setExams]=useState([]);
+  const[examModal,setExamModal]=useState(null);
+  const[examScore,setExamScore]=useState("");
 
   const fileRef=useRef(null);
   const bonusFileRef=useRef(null);
@@ -160,6 +197,8 @@ export default function App(){
     if(d.xp)setXp(d.xp);if(d.streaks)setStreaks(d.streaks);if(d.goals)setGoals(d.goals);
     if(d.swaps)setSwaps(d.swaps);if(d.activeReminders)setActiveReminders(d.activeReminders);
     if(d.messages)setMessages(d.messages);if(d.penalties)setPenalties(d.penalties);
+    if(d.earnedBadges)setEarnedBadges(d.earnedBadges);if(d.totalXpEarned)setTotalXpEarned(d.totalXpEarned);
+    if(d.approvedCount)setApprovedCount(d.approvedCount);if(d.exams)setExams(d.exams);
   }}catch{}})();},[]);
 
   const save=useCallback(async(overrides={})=>{try{await storage.set("chores-v5",JSON.stringify({
@@ -167,7 +206,9 @@ export default function App(){
     xp:overrides.xp||xp,streaks:overrides.streaks||streaks,goals:overrides.goals||goals,
     swaps:overrides.swaps||swaps,activeReminders:overrides.activeReminders||activeReminders,
     messages:overrides.messages||messages,penalties:overrides.penalties||penalties,
-  }));}catch{}},[tasks,completions,pins,xp,streaks,goals,swaps,activeReminders,messages,penalties]);
+    earnedBadges:overrides.earnedBadges||earnedBadges,totalXpEarned:overrides.totalXpEarned||totalXpEarned,
+    approvedCount:overrides.approvedCount||approvedCount,exams:overrides.exams||exams,
+  }));}catch{}},[tasks,completions,pins,xp,streaks,goals,swaps,activeReminders,messages,penalties,earnedBadges,totalXpEarned,approvedCount,exams]);
 
   const flash=(m)=>{setToast(m);setTimeout(()=>setToast(null),2200);};
   const cKey=(tid,cid,day)=>`${wk}_${tid}_${cid}_${day}`;
@@ -195,6 +236,33 @@ export default function App(){
     return newXp;
   };
 
+  const checkBadges=(cid,cStreaks,cTotalXp,cApprovedCount,cEarnedBadges)=>{
+    const earned=cEarnedBadges[cid]||[];const newlyEarned=[];
+    for(const badge of DEFAULT_BADGES){if(earned.includes(badge.id))continue;let ok=false;
+      if(badge.condition==="streak_days")ok=(cStreaks[cid]||0)>=badge.value;
+      else if(badge.condition==="chores_completed")ok=(cApprovedCount[cid]||0)>=badge.value;
+      else if(badge.condition==="total_xp_earned")ok=(cTotalXp[cid]||0)>=badge.value;
+      if(ok)newlyEarned.push(badge.id);}
+    if(newlyEarned.length>0){const ub={...cEarnedBadges,[cid]:[...earned,...newlyEarned]};setEarnedBadges(ub);
+      const first=DEFAULT_BADGES.find(b=>b.id===newlyEarned[0]);setBadgeNotification({badge:first,childId:cid});
+      setTimeout(()=>setBadgeNotification(null),3000);return ub;}
+    return cEarnedBadges;
+  };
+
+  const addExam=(childId,score)=>{
+    const s=parseInt(score);if(isNaN(s)||s<0||s>100){flash("⚠️ ציון לא תקין");return;}
+    const eb=EXAM_BONUSES.find(x=>s>=x.min);
+    if(!eb){flash("⚠️ ציון מתחת ל-90, אין בונוס");setExamModal(null);setExamScore("");return;}
+    const ne=[...exams,{id:"ex_"+Date.now(),childId,score:s,bonus:eb.bonus,ts:Date.now(),by:user}];setExams(ne);
+    const nm=[...messages,{id:"msg_"+Date.now(),from:user,to:childId,text:`📝 ${eb.label} - בונוס ${eb.bonus}₪!`,star:"📝",ts:Date.now()}];
+    setMessages(nm);save({exams:ne,messages:nm});flash(`📝 ${eb.label} - ${eb.bonus}₪ ל${FAMILY[childId]?.name}!`);
+    setExamModal(null);setExamScore("");
+  };
+
+  const getWeeklyXpData=()=>{const data={};CH.forEach(cid=>{let w=0;
+    for(let d=0;d<7;d++){tasks.forEach(t=>{const k=cKey(t.id,cid,d);if(completions[k]?.approved)w+=t.bonus?t.weight*2:t.weight;});}
+    data[cid]=w;});return data;};
+
   const markDone=(tid,cid,day,photo)=>{
     const k=cKey(tid,cid,day);
     const nc={...completions,[k]:{done:true,photo:photo||null,approved:false,approvedBy:null,ts:Date.now()}};
@@ -213,13 +281,22 @@ export default function App(){
     const task=tasks.find(t=>t.id===tid);
     const xpGain=task?(task.bonus?task.weight*2:task.weight):5;
     const newXp=addXp(cid,xpGain);
+    // Track lifetime XP & approved count
+    const newTotalXp={...totalXpEarned,[cid]:(totalXpEarned[cid]||0)+xpGain};setTotalXpEarned(newTotalXp);
+    const newAC={...approvedCount,[cid]:(approvedCount[cid]||0)+1};setApprovedCount(newAC);
     // Update streak
     const today=getToday();
     const allToday=tasks.filter(t=>isTaskForChild(t,cid,today)&&!t.bonus);
     const allApproved=allToday.every(t=>{const kk=cKey(t.id,cid,today);return(t.id===tid?nc:completions)[kk]?.approved||nc[kk]?.approved;});
-    let newStreaks=streaks;
-    if(allApproved){newStreaks={...streaks,[cid]:(streaks[cid]||0)+1};setStreaks(newStreaks);}
-    save({completions:nc,xp:newXp,streaks:newStreaks});flash(`👍 +${xpGain}XP!`);
+    let newStreaks=streaks;let streakBonusXp=0;
+    if(allApproved){const ns=(streaks[cid]||0)+1;newStreaks={...streaks,[cid]:ns};setStreaks(newStreaks);
+      if(ns>0&&ns%7===0){streakBonusXp=ns*5;newXp[cid]=(newXp[cid]||0)+streakBonusXp;setXp(newXp);
+        newTotalXp[cid]=(newTotalXp[cid]||0)+streakBonusXp;setTotalXpEarned(newTotalXp);}}
+    // Check badges
+    const newBadges=checkBadges(cid,newStreaks,newTotalXp,newAC,earnedBadges);
+    save({completions:nc,xp:newXp,streaks:newStreaks,totalXpEarned:newTotalXp,approvedCount:newAC,earnedBadges:newBadges});
+    const bm=streakBonusXp>0?` + 🔥${streakBonusXp} בונוס רצף!`:"";
+    flash(`👍 +${xpGain}XP!${bm}`);
   };
 
   const reject=(tid,cid,day)=>{const k=cKey(tid,cid,day);const nc={...completions};delete nc[k];setCompletions(nc);save({completions:nc});flash("❌ נדחה");};
@@ -353,8 +430,8 @@ export default function App(){
   if(screen==="login"){return(
     <div style={S.lw}><div style={S.lc}>
       <div style={{fontSize:44,marginBottom:4}}>🏠</div>
-      <h1 style={{fontSize:20,fontWeight:800,color:"#1e293b",margin:"0 0 2px"}}>משימות המשפחה</h1>
-      <p style={{fontSize:11,color:"#94a3b8",margin:"0 0 18px"}}>גיימיפיקציה • משקלים • יעדים משפחתיים</p>
+      <h1 style={{fontSize:20,fontWeight:800,color:"#1e293b",margin:"0 0 2px"}}>משפחת גונן</h1>
+      <p style={{fontSize:11,color:"#94a3b8",margin:"0 0 18px"}}>משימות • גיימיפיקציה • יעדים משפחתיים</p>
       <div style={S.ug}>{Object.entries(FAMILY).map(([id,m])=>{
         const lvl=CH.includes(id)?getLevel(id):null;
         return(
@@ -376,6 +453,7 @@ export default function App(){
     <div style={S.app} dir="rtl">
       <Confetti show={showConfetti}/>
       <LevelUp show={!!levelUpInfo} level={levelUpInfo}/>
+      <BadgeEarned show={!!badgeNotification} badge={badgeNotification?.badge}/>
       {toast&&<div style={S.toast}>{toast}</div>}
 
       {/* HEADER */}
@@ -393,7 +471,9 @@ export default function App(){
       {/* TABS */}
       <div style={S.tabs}>
         {[
-          {id:"home",l:"🏠"},{id:"tasks",l:"📋"},{id:"dash",l:"📊"},
+          {id:"home",l:"🏠"},{id:"tasks",l:"📋"},
+          ...(!isP?[{id:"badges",l:"🏅"}]:[]),
+          {id:"dash",l:"📊"},
           ...(isP?[{id:"approve",l:"✅"},{id:"manage",l:"⚙️"}]:[]),
         ].map(t=><button key={t.id} onClick={()=>setScreen(t.id)}
           style={{...S.tab,...(screen===t.id?S.tabA:{})}}>{t.l}</button>)}
@@ -475,6 +555,14 @@ export default function App(){
                   </div>
                 </div>
 
+                {/* Streak at risk warning */}
+                {(streaks[user]||0)>0&&todayDone<todayTasks.length&&todayTasks.length>0&&(
+                  <div style={{background:"linear-gradient(135deg,#fef3c7,#fffbeb)",border:"1px solid #f59e0b60",borderRadius:12,padding:10,marginBottom:10,textAlign:"center"}}>
+                    <div style={{fontSize:13,fontWeight:700,color:"#f59e0b"}}>🔥 עוד {todayTasks.length-todayDone} משימ{todayTasks.length-todayDone===1?"ה":"ות"} לשמור על הרצף!</div>
+                    <div style={{fontSize:10,color:"#fbbf24"}}>רצף נוכחי: {streaks[user]} ימים</div>
+                  </div>
+                )}
+
                 {/* Today progress */}
                 <div style={{background:"#ffffff",borderRadius:14,padding:14,marginBottom:10,border:"1px solid #e2e8f0"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
@@ -511,6 +599,19 @@ export default function App(){
                     </div>
                   </div>
                 )}
+
+                {/* Badges preview */}
+                {(()=>{const myBadges=earnedBadges[user]||[];if(myBadges.length===0)return null;return(
+                  <div style={{background:"#ffffff",borderRadius:14,padding:12,marginBottom:10,border:"1px solid #f59e0b40"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                      <span style={{fontSize:12,fontWeight:700,color:"#1e293b"}}>🏅 תגים</span>
+                      <button onClick={()=>setScreen("badges")} style={{background:"none",border:"none",color:"#6366f1",fontSize:10,cursor:"pointer"}}>צפה בכולם →</button>
+                    </div>
+                    <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                      {myBadges.slice(0,6).map(bid=>{const badge=DEFAULT_BADGES.find(b=>b.id===bid);return badge?<span key={bid} title={badge.title} style={{fontSize:20}}>{badge.emoji}</span>:null;})}
+                    </div>
+                  </div>
+                );})()}
               </>
             );
           })()}
@@ -537,6 +638,8 @@ export default function App(){
                   </div>
                 );
               })}
+              {/* Exam report button */}
+              <button onClick={()=>setExamModal(true)} style={{width:"100%",padding:10,background:"linear-gradient(135deg,#6366f120,#6366f110)",border:"1px solid #6366f140",borderRadius:12,color:"#6366f1",fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:10}}>📝 דיווח ציון מבחן</button>
               {/* Pending approvals count */}
               {(()=>{let cnt=0;tasks.forEach(t=>t.assignedTo.forEach(c=>{for(let d=0;d<7;d++){if(completions[cKey(t.id,c,d)]?.done&&!completions[cKey(t.id,c,d)]?.approved)cnt++;}}));
                 return cnt>0&&<button onClick={()=>setScreen("approve")} style={{width:"100%",padding:10,background:"linear-gradient(135deg,#f59e0b20,#f59e0b10)",border:"1px solid #f59e0b40",borderRadius:12,color:"#f59e0b",fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:10}}>✅ {cnt} ממתינים לאישור →</button>;
@@ -655,9 +758,39 @@ export default function App(){
         </>
       )}
 
+      {/* ══ BADGES ══ */}
+      {screen==="badges"&&!isP&&(()=>{const myBadges=earnedBadges[user]||[];return<>
+        <h2 style={S.st}>🏅 תגים והישגים</h2>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+          {DEFAULT_BADGES.map(badge=>{const earned=myBadges.includes(badge.id);return(
+            <div key={badge.id} style={{background:earned?"linear-gradient(135deg,#fef3c7,#fffbeb)":"#f8fafc",borderRadius:12,padding:12,textAlign:"center",
+              border:earned?"2px solid #f59e0b":"1px solid #e2e8f0",opacity:earned?1:0.5}}>
+              <div style={{fontSize:28}}>{earned?badge.emoji:"❓"}</div>
+              <div style={{fontSize:10,fontWeight:700,color:earned?"#1e293b":"#94a3b8",marginTop:4}}>{earned?badge.title:"???"}</div>
+              {earned&&<div style={{fontSize:8,color:"#f59e0b",marginTop:2}}>{badge.desc}</div>}
+            </div>);
+          })}
+        </div>
+        <div style={{textAlign:"center",marginTop:12,fontSize:11,color:"#94a3b8"}}>{myBadges.length}/{DEFAULT_BADGES.length} תגים נפתחו</div>
+      </>;})()}
+
       {/* ══ DASHBOARD ══ */}
       {screen==="dash"&&<>
         <h2 style={S.st}>📊 דשבורד</h2>
+        {/* LEADERBOARD */}
+        <div style={{background:"linear-gradient(135deg,#fef3c7,#fef9c3)",borderRadius:14,padding:14,marginBottom:12,border:"1px solid #f59e0b40"}}>
+          <div style={{fontSize:13,fontWeight:800,color:"#1e293b",marginBottom:8,textAlign:"center"}}>🏆 לוח תוצאות שבועי</div>
+          {(()=>{const wd=getWeeklyXpData();const ranked=[...CH].sort((a,b)=>(wd[b]||0)-(wd[a]||0));
+            return ranked.map((cid,idx)=>{const m=FAMILY[cid];const lv=getLevel(cid);return(
+              <div key={cid} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",marginBottom:4,
+                background:idx===0?"#fff":"#fffbeb80",borderRadius:10,border:idx===0?"2px solid #f59e0b":"1px solid #f59e0b20"}}>
+                <span style={{fontSize:18,minWidth:24}}>{idx===0?"👑":idx===1?"🥈":"🥉"}</span>
+                <span style={{fontSize:13,fontWeight:700,color:m.color,flex:1}}>{m.name}</span>
+                <span style={{fontSize:10,color:"#64748b"}}>{lv.emoji} • 🔥{streaks[cid]||0}</span>
+                <span style={{fontSize:14,fontWeight:800,color:"#f59e0b",background:"#f59e0b15",padding:"2px 8px",borderRadius:8}}>{wd[cid]||0} XP</span>
+              </div>);});
+          })()}
+        </div>
         {CH.map(cid=>{const m=FAMILY[cid];const st=getWeekStats(cid);const lv=getLevel(cid);return(
           <div key={cid} style={S.dc}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
@@ -697,6 +830,17 @@ export default function App(){
             })()}
           </div>
         </div>
+        {/* Exam history */}
+        {exams.length>0&&<div style={{background:"#ffffff",borderRadius:14,padding:14,marginTop:12,border:"1px solid #6366f140"}}>
+          <div style={{fontSize:13,fontWeight:800,color:"#1e293b",marginBottom:8}}>📝 היסטוריית מבחנים</div>
+          {exams.slice().reverse().slice(0,10).map(ex=>(
+            <div key={ex.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderBottom:"1px solid #e2e8f0"}}>
+              <span style={{fontSize:13,fontWeight:700,color:FAMILY[ex.childId]?.color}}>{FAMILY[ex.childId]?.name}</span>
+              <span style={{flex:1,fontSize:11,color:"#64748b"}}>ציון {ex.score}</span>
+              <span style={{fontSize:12,fontWeight:700,color:"#10b981"}}>+{ex.bonus}₪</span>
+            </div>
+          ))}
+        </div>}
       </>}
 
       {/* ══ APPROVE ══ */}
@@ -977,6 +1121,40 @@ export default function App(){
               ))}
             </div>
             <button onClick={()=>setPenaltyModal(null)} style={{...S.mc,marginTop:8}}>ביטול</button>
+          </div>
+        </div>
+      )}
+
+      {/* EXAM MODAL */}
+      {examModal&&isP&&(
+        <div style={S.ov} onClick={()=>{setExamModal(null);setExamScore("");}}>
+          <div style={S.md} onClick={e=>e.stopPropagation()}>
+            <h3 style={S.mt}>📝 דיווח ציון מבחן</h3>
+            {examModal===true?(
+              <>{/* Select child */}
+                <p style={{color:"#64748b",fontSize:11,textAlign:"center",margin:"0 0 10px"}}>בחר/י ילד/ה:</p>
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  {CH.map(c=><button key={c} onClick={()=>setExamModal({childId:c})}
+                    style={{padding:12,background:"#f1f5f9",border:"1px solid #e2e8f0",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontWeight:700,color:FAMILY[c].color}}>{FAMILY[c].name}</span>
+                  </button>)}
+                </div>
+              </>
+            ):(
+              <>{/* Enter score */}
+                <p style={{color:"#64748b",fontSize:11,textAlign:"center",margin:"0 0 10px"}}>ציון של {FAMILY[examModal.childId]?.name}:</p>
+                <input style={{...S.inp,textAlign:"center",fontSize:24,fontWeight:800}} type="number" min="0" max="100" placeholder="0-100"
+                  value={examScore} onChange={e=>setExamScore(e.target.value.slice(0,3))}/>
+                {examScore&&parseInt(examScore)>=90&&(
+                  <div style={{background:"linear-gradient(135deg,#ecfdf5,#d1fae5)",borderRadius:10,padding:10,marginBottom:8,textAlign:"center",border:"1px solid #10b98140"}}>
+                    <div style={{fontSize:14,fontWeight:800,color:"#10b981"}}>💰 בונוס: {parseInt(examScore)>=100?100:50}₪</div>
+                  </div>
+                )}
+                <button onClick={()=>addExam(examModal.childId,examScore)}
+                  style={{width:"100%",padding:10,background:"linear-gradient(135deg,#4f46e5,#6366f1)",border:"none",borderRadius:10,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:5}}>📝 שלח</button>
+              </>
+            )}
+            <button onClick={()=>{setExamModal(null);setExamScore("");}} style={{...S.mc,marginTop:8}}>ביטול</button>
           </div>
         </div>
       )}
