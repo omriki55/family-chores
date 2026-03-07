@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { HDate, HebrewCalendar, flags } from '@hebcal/core';
 import storage from "./storage.js";
 
 const DAYS=["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
@@ -190,6 +191,13 @@ export default function App(){
   // Family Wall
   const[wallText,setWallText]=useState("");
   const[wallTo,setWallTo]=useState("wall");
+  // Calendar
+  const[calYear,setCalYear]=useState(new Date().getFullYear());
+  const[calMonth,setCalMonth]=useState(new Date().getMonth());
+  const[calSelDate,setCalSelDate]=useState(null);
+  const[calEvents,setCalEvents]=useState([]);
+  const[calEventModal,setCalEventModal]=useState(false);
+  const[calNewEvent,setCalNewEvent]=useState({title:"",icon:"📌",type:"custom",recurring:null,members:[]});
 
   const fileRef=useRef(null);
   const bonusFileRef=useRef(null);
@@ -202,6 +210,7 @@ export default function App(){
     if(d.messages)setMessages(d.messages.map(m=>({...m,type:m.type||"praise",reactions:m.reactions||{}})));if(d.penalties)setPenalties(d.penalties);
     if(d.earnedBadges)setEarnedBadges(d.earnedBadges);if(d.totalXpEarned)setTotalXpEarned(d.totalXpEarned);
     if(d.approvedCount)setApprovedCount(d.approvedCount);if(d.exams)setExams(d.exams);
+    if(d.calEvents)setCalEvents(d.calEvents);
   }}catch{}})();},[]);
 
   const save=useCallback(async(overrides={})=>{try{await storage.set("chores-v5",JSON.stringify({
@@ -211,7 +220,8 @@ export default function App(){
     messages:overrides.messages||messages,penalties:overrides.penalties||penalties,
     earnedBadges:overrides.earnedBadges||earnedBadges,totalXpEarned:overrides.totalXpEarned||totalXpEarned,
     approvedCount:overrides.approvedCount||approvedCount,exams:overrides.exams||exams,
-  }));}catch{}},[tasks,completions,pins,xp,streaks,goals,swaps,activeReminders,messages,penalties,earnedBadges,totalXpEarned,approvedCount,exams]);
+    calEvents:overrides.calEvents||calEvents,
+  }));}catch{}},[tasks,completions,pins,xp,streaks,goals,swaps,activeReminders,messages,penalties,earnedBadges,totalXpEarned,approvedCount,exams,calEvents]);
 
   const flash=(m)=>{setToast(m);setTimeout(()=>setToast(null),2200);};
   const cKey=(tid,cid,day)=>`${wk}_${tid}_${cid}_${day}`;
@@ -224,6 +234,39 @@ export default function App(){
     return true;
   };
   const getChildW=(cid)=>tasks.filter(t=>isTaskForChild(t,cid,selDay)&&!t.bonus).reduce((s,t)=>s+t.weight,0);
+
+  // ── Calendar helpers ──
+  const dateKey=(y,m,d)=>`${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+  const getWkForDate=(date)=>{const d=new Date(date),s=new Date(d.getFullYear(),0,1);return`${d.getFullYear()}-W${Math.ceil((d-s)/604800000)}`;};
+  const getMonthHolidays=(year,month)=>{
+    const evs=HebrewCalendar.calendar({start:new Date(year,month,1),end:new Date(year,month+1,0),il:true,locale:'he'});
+    const map={};
+    for(const ev of evs){const g=ev.getDate().greg();const k=dateKey(g.getFullYear(),g.getMonth(),g.getDate());
+      if(!map[k])map[k]=[];map[k].push({title:ev.render('he'),emoji:ev.getFlags()&flags.LIGHT_CANDLES?'🕯️':'✡️'});}
+    return map;
+  };
+  const getTasksForDate=(dateStr)=>{
+    const d=new Date(dateStr),dow=d.getDay(),w=getWkForDate(dateStr),result={};
+    CH.forEach(cid=>{const ct=tasks.filter(t=>isTaskForChild(t,cid,dow)&&!t.bonus);
+      result[cid]=ct.map(t=>{const k=`${w}_${t.id}_${cid}_${dow}`;return{...t,completion:completions[k]||null};});});
+    return result;
+  };
+  const eventsForDate=(dateStr)=>calEvents.filter(ev=>{
+    if(ev.date===dateStr)return true;
+    if(ev.recurring==="yearly")return ev.date.slice(5)===dateStr.slice(5);
+    if(ev.recurring==="monthly")return ev.date.slice(8)===dateStr.slice(8);
+    if(ev.recurring==="weekly")return new Date(ev.date).getDay()===new Date(dateStr).getDay();
+    return false;
+  });
+  const calPrev=()=>{if(calMonth===0){setCalMonth(11);setCalYear(y=>y-1);}else setCalMonth(m=>m-1);setCalSelDate(null);};
+  const calNext=()=>{if(calMonth===11){setCalMonth(0);setCalYear(y=>y+1);}else setCalMonth(m=>m+1);setCalSelDate(null);};
+  const addCalEvent=()=>{
+    if(!calNewEvent.title.trim()){flash("⚠️ חסר שם");return;}
+    const ne=[...calEvents,{...calNewEvent,id:"ev_"+Date.now(),date:calEventModal.date,createdBy:user,color:FAMILY[user]?.color||"#6366f1"}];
+    setCalEvents(ne);save({calEvents:ne});setCalEventModal(false);
+    setCalNewEvent({title:"",icon:"📌",type:"custom",recurring:null,members:[]});flash("📅 נוסף!");
+  };
+  const deleteCalEvent=(evId)=>{const ne=calEvents.filter(e=>e.id!==evId);setCalEvents(ne);save({calEvents:ne});flash("🗑️");};
 
   const getLevel=(cid)=>{const x=xp[cid]||0;let lv=LEVELS[0];for(const l of LEVELS)if(x>=l.min)lv=l;return lv;};
   const getNextLevel=(cid)=>{const x=xp[cid]||0;for(const l of LEVELS)if(x<l.min)return l;return null;};
@@ -503,7 +546,7 @@ export default function App(){
       <div style={S.tabs}>
         {(()=>{const wallUnread=messages.filter(m=>(m.to==="wall"||m.to===user)&&m.from!==user&&(Date.now()-m.ts)<86400000).length;
         return[
-          {id:"home",l:"🏠"},{id:"wall",l:wallUnread>0?"💬":"💬",badge:wallUnread},{id:"tasks",l:"📋"},
+          {id:"home",l:"🏠"},{id:"wall",l:"💬",badge:wallUnread},{id:"cal",l:"📅"},{id:"tasks",l:"📋"},
           ...(!isP?[{id:"badges",l:"🏅"}]:[]),
           {id:"dash",l:"📊"},
           ...(isP?[{id:"approve",l:"✅"},{id:"manage",l:"⚙️"}]:[]),
@@ -778,6 +821,105 @@ export default function App(){
           })()}
         </>
       )}
+
+      {/* ══ CALENDAR ══ */}
+      {screen==="cal"&&(()=>{
+        const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
+        const firstDay=new Date(calYear,calMonth,1).getDay();
+        const today=new Date();const todayKey=dateKey(today.getFullYear(),today.getMonth(),today.getDate());
+        const holidays=getMonthHolidays(calYear,calMonth);
+        const hd15=new HDate(new Date(calYear,calMonth,15));
+        const hebMonthName=hd15.renderGematriya().split(' ').slice(1).join(' ');
+        const gregMonthName=new Date(calYear,calMonth,1).toLocaleDateString('he-IL',{month:'long',year:'numeric'});
+        const GREG_MONTHS=["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+        return(
+        <>
+          <div style={{fontSize:15,fontWeight:800,textAlign:"center",marginBottom:8}}>📅 לוח שנה</div>
+          {/* Month nav */}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,background:"#fff",borderRadius:12,padding:"8px 12px",border:"1px solid #e2e8f0"}}>
+            <button onClick={calNext} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",color:"#6366f1",fontWeight:700}}>›</button>
+            <div style={{textAlign:"center"}}>
+              <div style={{fontSize:13,fontWeight:700,color:"#1e293b"}}>{hebMonthName}</div>
+              <div style={{fontSize:10,color:"#64748b"}}>{GREG_MONTHS[calMonth]} {calYear}</div>
+            </div>
+            <button onClick={calPrev} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",color:"#6366f1",fontWeight:700}}>‹</button>
+          </div>
+          {/* Day headers */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:2}}>
+            {DS.map((d,i)=><div key={i} style={{textAlign:"center",fontSize:9,fontWeight:700,color:i===6?"#f59e0b":"#64748b",padding:"3px 0"}}>{d}</div>)}
+          </div>
+          {/* Calendar grid */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:8}}>
+            {Array.from({length:firstDay},(_,i)=><div key={"e"+i}/>)}
+            {Array.from({length:daysInMonth},(_,i)=>{
+              const day=i+1;const dk=dateKey(calYear,calMonth,day);const dow=new Date(calYear,calMonth,day).getDay();
+              const isToday=dk===todayKey;const isSel=dk===calSelDate;const isSat=dow===6;
+              const hols=holidays[dk]||[];const evs=eventsForDate(dk);
+              let hd;try{hd=new HDate(new Date(calYear,calMonth,day));}catch{hd=null;}
+              const hebDay=hd?hd.getDate():"";
+              const childDots=CH.filter(cid=>tasks.some(t=>isTaskForChild(t,cid,dow)&&!t.bonus));
+              return(
+                <button key={day} onClick={()=>setCalSelDate(isSel?null:dk)}
+                  style={{minHeight:44,padding:"2px 1px",background:isSel?"#6366f130":isToday?"#6366f110":hols.length>0?"#ede9fe":isSat?"#fef3c720":"#fff",
+                    border:isSel?"2px solid #6366f1":isToday?"2px solid #6366f160":"1px solid #e2e8f0",borderRadius:6,cursor:"pointer",
+                    display:"flex",flexDirection:"column",alignItems:"center",gap:0,position:"relative"}}>
+                  <div style={{fontSize:12,fontWeight:isToday?800:600,color:isToday?"#6366f1":isSat?"#f59e0b":"#1e293b"}}>{day}</div>
+                  {hebDay&&<div style={{fontSize:6,color:"#94a3b8",lineHeight:1,marginTop:-1}}>{hebDay}</div>}
+                  {childDots.length>0&&<div style={{display:"flex",gap:1,marginTop:1}}>
+                    {childDots.map(c=><span key={c} style={{width:4,height:4,borderRadius:2,background:FAMILY[c].color}}/>)}
+                  </div>}
+                  {hols.length>0&&<div style={{fontSize:5,lineHeight:1}}>✡️</div>}
+                  {evs.length>0&&<div style={{position:"absolute",top:1,left:1,width:5,height:5,borderRadius:3,background:"#ec4899"}}/>}
+                </button>
+              );
+            })}
+          </div>
+          {/* Selected day detail */}
+          {calSelDate&&(()=>{
+            const d=new Date(calSelDate);const dow=d.getDay();
+            let hd2;try{hd2=new HDate(d);}catch{hd2=null;}
+            const hebFull=hd2?hd2.renderGematriya():"";
+            const hols=holidays[calSelDate]||[];const evs=eventsForDate(calSelDate);
+            const dayTasks=getTasksForDate(calSelDate);
+            return(
+              <div style={{background:"#fff",borderRadius:12,padding:12,border:"1px solid #e2e8f0",marginBottom:8}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:700,color:"#1e293b"}}>{DAYS[dow]} {d.getDate()}/{d.getMonth()+1}</div>
+                    {hebFull&&<div style={{fontSize:10,color:"#6366f1"}}>{hebFull}</div>}
+                  </div>
+                  <button onClick={()=>setCalSelDate(null)} style={{background:"none",border:"none",fontSize:14,cursor:"pointer",color:"#94a3b8"}}>✕</button>
+                </div>
+                {hols.map((h,i)=><div key={i} style={{fontSize:11,color:"#7c3aed",fontWeight:600,marginBottom:4}}>✡️ {h.title}</div>)}
+                {/* Tasks per child */}
+                {CH.map(cid=>{const ct=dayTasks[cid];if(!ct||ct.length===0)return null;
+                  return(<div key={cid} style={{marginBottom:6}}>
+                    <div style={{fontSize:10,fontWeight:700,color:FAMILY[cid].color,marginBottom:2}}>{FAMILY[cid].emoji} {FAMILY[cid].name}</div>
+                    {ct.map(t=><div key={t.id} style={{fontSize:10,color:"#475569",display:"flex",alignItems:"center",gap:4,marginBottom:1}}>
+                      <span>{t.completion?.approved?"✅":t.completion?.done?"⏳":"○"}</span>
+                      <span>{t.icon} {t.title}</span>
+                    </div>)}
+                  </div>);
+                })}
+                {/* Custom events */}
+                {evs.length>0&&<div style={{borderTop:"1px solid #e2e8f0",paddingTop:6,marginTop:4}}>
+                  {evs.map(ev=><div key={ev.id} style={{fontSize:10,display:"flex",alignItems:"center",gap:4,marginBottom:2}}>
+                    <span>{ev.icon}</span><span style={{fontWeight:600}}>{ev.title}</span>
+                    {ev.recurring&&<span style={{fontSize:7,color:"#94a3b8"}}>🔁</span>}
+                    {isP&&<button onClick={()=>deleteCalEvent(ev.id)} style={{marginRight:"auto",marginLeft:0,background:"none",border:"none",fontSize:10,color:"#ef4444",cursor:"pointer"}}>🗑</button>}
+                  </div>)}
+                </div>}
+                {/* Add event button */}
+                {isP&&<button onClick={()=>setCalEventModal({date:calSelDate})}
+                  style={{width:"100%",padding:6,background:"#6366f110",border:"1px dashed #6366f140",borderRadius:8,color:"#6366f1",fontSize:10,fontWeight:600,cursor:"pointer",marginTop:6}}>
+                  + הוסף אירוע
+                </button>}
+              </div>
+            );
+          })()}
+        </>
+        );
+      })()}
 
       {/* ══ TASKS ══ */}
       {screen==="tasks"&&(
@@ -1218,6 +1360,41 @@ export default function App(){
       )}
 
       {/* EXAM MODAL */}
+      {/* CALENDAR EVENT MODAL */}
+      {calEventModal&&isP&&(
+        <div style={S.ov} onClick={()=>setCalEventModal(false)}>
+          <div style={S.md} onClick={e=>e.stopPropagation()}>
+            <h3 style={S.mt}>📅 אירוע חדש — {calEventModal.date}</h3>
+            <input style={S.inp} placeholder="שם האירוע..." value={calNewEvent.title}
+              onChange={e=>setCalNewEvent(p=>({...p,title:e.target.value}))}/>
+            <div style={{fontSize:10,fontWeight:600,color:"#64748b",marginBottom:4}}>אייקון:</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8}}>
+              {["📌","🎂","📚","🏫","👨‍⚕️","🎵","⚽","🎉","🕯️","💼","🛫","🎭"].map(em=>(
+                <button key={em} onClick={()=>setCalNewEvent(p=>({...p,icon:em}))}
+                  style={{...S.chip,...(calNewEvent.icon===em?{borderColor:"#6366f1",background:"#6366f115",color:"#6366f1"}:{})}}>{em}</button>
+              ))}
+            </div>
+            <div style={{fontSize:10,fontWeight:600,color:"#64748b",marginBottom:4}}>סוג:</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8}}>
+              {[{id:"custom",l:"מותאם"},{id:"birthday",l:"🎂 יום הולדת"},{id:"class",l:"📚 חוג"},{id:"meeting",l:"👨‍⚕️ פגישה"}].map(t=>(
+                <button key={t.id} onClick={()=>setCalNewEvent(p=>({...p,type:t.id}))}
+                  style={{...S.chip,...(calNewEvent.type===t.id?{borderColor:"#6366f1",background:"#6366f115",color:"#6366f1"}:{})}}>{t.l}</button>
+              ))}
+            </div>
+            <div style={{fontSize:10,fontWeight:600,color:"#64748b",marginBottom:4}}>חוזר:</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8}}>
+              {[{id:null,l:"חד פעמי"},{id:"weekly",l:"שבועי"},{id:"monthly",l:"חודשי"},{id:"yearly",l:"שנתי"}].map(r=>(
+                <button key={r.id||"none"} onClick={()=>setCalNewEvent(p=>({...p,recurring:r.id}))}
+                  style={{...S.chip,...(calNewEvent.recurring===r.id?{borderColor:"#6366f1",background:"#6366f115",color:"#6366f1"}:{})}}>{r.l}</button>
+              ))}
+            </div>
+            <button onClick={addCalEvent}
+              style={{width:"100%",padding:10,background:"linear-gradient(135deg,#4f46e5,#6366f1)",border:"none",borderRadius:10,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:5}}>📅 הוסף</button>
+            <button onClick={()=>setCalEventModal(false)} style={{...S.mc,marginTop:4}}>ביטול</button>
+          </div>
+        </div>
+      )}
+
       {examModal&&isP&&(
         <div style={S.ov} onClick={()=>{setExamModal(null);setExamScore("");}}>
           <div style={S.md} onClick={e=>e.stopPropagation()}>
