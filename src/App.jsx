@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import storage from "./storage.js";
 
 const DAYS=["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
 const DS=["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
@@ -137,13 +138,13 @@ export default function App(){
   const bonusFileRef=useRef(null);
   const wk=getWk();
 
-  useEffect(()=>{(async()=>{try{const s=await window.storage.get("chores-v5");if(s){const d=JSON.parse(s.value);
+  useEffect(()=>{(async()=>{try{const s=await storage.get("chores-v5");if(s){const d=JSON.parse(s.value);
     if(d.tasks)setTasks(d.tasks);if(d.completions)setCompletions(d.completions);if(d.pins)setPins(d.pins);
     if(d.xp)setXp(d.xp);if(d.streaks)setStreaks(d.streaks);if(d.goals)setGoals(d.goals);
     if(d.swaps)setSwaps(d.swaps);if(d.activeReminders)setActiveReminders(d.activeReminders);
   }}catch{}})();},[]);
 
-  const save=useCallback(async(overrides={})=>{try{await window.storage.set("chores-v5",JSON.stringify({
+  const save=useCallback(async(overrides={})=>{try{await storage.set("chores-v5",JSON.stringify({
     tasks:overrides.tasks||tasks,completions:overrides.completions||completions,pins:overrides.pins||pins,
     xp:overrides.xp||xp,streaks:overrides.streaks||streaks,goals:overrides.goals||goals,
     swaps:overrides.swaps||swaps,activeReminders:overrides.activeReminders||activeReminders,
@@ -317,7 +318,6 @@ export default function App(){
         return(
           <button key={id} onClick={()=>{setPinScreen(id);setPinInput("");setPinError(false);}}
             style={{...S.ub,borderColor:m.color+"40",background:`linear-gradient(135deg,${m.color}10,${m.color}05)`,position:"relative"}}>
-            <span style={{fontSize:28}}>{m.emoji}</span>
             <span style={{fontSize:13,fontWeight:700,color:m.color}}>{m.name}</span>
             {lvl&&<span style={{fontSize:9,color:"#94a3b8"}}>{lvl.emoji} {lvl.name}</span>}
             <span style={{fontSize:9,color:"#64748b"}}>{m.role==="parent"?"🔑 הורה":m.weeklyPay>0?`${m.weeklyPay}₪`:""}</span>
