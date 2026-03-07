@@ -208,7 +208,7 @@ export default function App(){
     if(d.xp)setXp(d.xp);if(d.streaks)setStreaks(d.streaks);if(d.goals)setGoals(d.goals);
     if(d.swaps)setSwaps(d.swaps);if(d.activeReminders)setActiveReminders(d.activeReminders);
     if(d.messages)setMessages(d.messages.map(m=>({...m,type:m.type||"praise",reactions:m.reactions||{}})));if(d.penalties)setPenalties(d.penalties);
-    if(d.earnedBadges)setEarnedBadges(d.earnedBadges);if(d.totalXpEarned)setTotalXpEarned(d.totalXpEarned);
+    if(d.earnedBadges){const migrated={};Object.keys(d.earnedBadges).forEach(cid=>{migrated[cid]=(d.earnedBadges[cid]||[]).map(b=>typeof b==='string'?{id:b,ts:0}:b);});setEarnedBadges(migrated);}if(d.totalXpEarned)setTotalXpEarned(d.totalXpEarned);
     if(d.approvedCount)setApprovedCount(d.approvedCount);if(d.exams)setExams(d.exams);
     if(d.calEvents)setCalEvents(d.calEvents);
   }}catch{}})();},[]);
@@ -285,13 +285,13 @@ export default function App(){
 
   const checkBadges=(cid,cStreaks,cTotalXp,cApprovedCount,cEarnedBadges)=>{
     const earned=cEarnedBadges[cid]||[];const newlyEarned=[];
-    for(const badge of DEFAULT_BADGES){if(earned.includes(badge.id))continue;let ok=false;
+    for(const badge of DEFAULT_BADGES){if(earned.some(e=>e.id===badge.id))continue;let ok=false;
       if(badge.condition==="streak_days")ok=(cStreaks[cid]||0)>=badge.value;
       else if(badge.condition==="chores_completed")ok=(cApprovedCount[cid]||0)>=badge.value;
       else if(badge.condition==="total_xp_earned")ok=(cTotalXp[cid]||0)>=badge.value;
-      if(ok)newlyEarned.push(badge.id);}
+      if(ok)newlyEarned.push({id:badge.id,ts:Date.now()});}
     if(newlyEarned.length>0){const ub={...cEarnedBadges,[cid]:[...earned,...newlyEarned]};setEarnedBadges(ub);
-      const first=DEFAULT_BADGES.find(b=>b.id===newlyEarned[0]);setBadgeNotification({badge:first,childId:cid});
+      const first=DEFAULT_BADGES.find(b=>b.id===newlyEarned[0].id);setBadgeNotification({badge:first,childId:cid});
       setTimeout(()=>setBadgeNotification(null),3000);return ub;}
     return cEarnedBadges;
   };
@@ -367,6 +367,22 @@ export default function App(){
     CH.forEach(c=>{const st=getWeekStats(c);total+=st.tc;approved+=st.ac;});
     return total>0?Math.round((approved/total)*100):0;
   };
+
+  // Report helpers
+  const getWeekCompletionCount=()=>{let done=0,total=0;CH.forEach(cid=>{for(let d=0;d<7;d++){
+    tasks.forEach(t=>{if(!isTaskForChild(t,cid,d)||t.bonus)return;total++;
+    if(completions[cKey(t.id,cid,d)]?.done)done++;});}});return{done,total};};
+  const getLeadingChild=()=>{const wd=getWeeklyXpData();return[...CH].sort((a,b)=>(wd[b]||0)-(wd[a]||0))[0];};
+  const getFamilyStreak=()=>Math.min(...CH.map(cid=>streaks[cid]||0));
+  const getWeekXpTotal=()=>{const wd=getWeeklyXpData();return Object.values(wd).reduce((s,v)=>s+v,0);};
+  const getHeatmapData=()=>{const grid=Array.from({length:7},()=>Array(24).fill(0));
+    Object.values(completions).forEach(c=>{if(!c?.ts)return;const d=new Date(c.ts);
+    grid[d.getDay()][d.getHours()]++;});return grid;};
+  const getRecentAchievements=()=>{const list=[];
+    CH.forEach(cid=>{(earnedBadges[cid]||[]).forEach(b=>{
+      const badge=DEFAULT_BADGES.find(x=>x.id===(b.id||b));
+      if(badge)list.push({childId:cid,badge,ts:b.ts||0});});});
+    return list.sort((a,b)=>b.ts-a.ts);};
 
   const getTodayPctForChild=(cid)=>{
     const today=getToday();
@@ -548,8 +564,7 @@ export default function App(){
         return[
           {id:"home",l:"🏠"},{id:"wall",l:"💬",badge:wallUnread},{id:"cal",l:"📅"},{id:"tasks",l:"📋"},
           ...(!isP?[{id:"badges",l:"🏅"}]:[]),
-          {id:"dash",l:"📊"},
-          ...(isP?[{id:"approve",l:"✅"},{id:"manage",l:"⚙️"}]:[]),
+          ...(isP?[{id:"dash",l:"📊"},{id:"approve",l:"✅"},{id:"manage",l:"⚙️"}]:[]),
         ].map(t=><button key={t.id} onClick={()=>setScreen(t.id)}
           style={{...S.tab,...(screen===t.id?S.tabA:{}),position:"relative"}}>{t.l}{t.badge>0&&<span style={{position:"absolute",top:2,right:2,width:8,height:8,borderRadius:4,background:"#ef4444"}}/>}</button>);})()}
       </div>
@@ -676,7 +691,7 @@ export default function App(){
                       <button onClick={()=>setScreen("badges")} style={{background:"none",border:"none",color:"#6366f1",fontSize:10,cursor:"pointer"}}>צפה בכולם →</button>
                     </div>
                     <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                      {myBadges.slice(0,6).map(bid=>{const badge=DEFAULT_BADGES.find(b=>b.id===bid);return badge?<span key={bid} title={badge.title} style={{fontSize:20}}>{badge.emoji}</span>:null;})}
+                      {myBadges.slice(0,6).map(b=>{const badge=DEFAULT_BADGES.find(x=>x.id===(b.id||b));return badge?<span key={b.id||b} title={badge.title} style={{fontSize:20}}>{badge.emoji}</span>:null;})}
                     </div>
                   </div>
                 );})()}
@@ -996,7 +1011,7 @@ export default function App(){
       {screen==="badges"&&!isP&&(()=>{const myBadges=earnedBadges[user]||[];return<>
         <h2 style={S.st}>🏅 תגים והישגים</h2>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-          {DEFAULT_BADGES.map(badge=>{const earned=myBadges.includes(badge.id);return(
+          {DEFAULT_BADGES.map(badge=>{const earned=myBadges.some(b=>b.id===badge.id);return(
             <div key={badge.id} style={{background:earned?"linear-gradient(135deg,#fef3c7,#fffbeb)":"#f8fafc",borderRadius:12,padding:12,textAlign:"center",
               border:earned?"2px solid #f59e0b":"1px solid #e2e8f0",opacity:earned?1:0.5}}>
               <div style={{fontSize:28}}>{earned?badge.emoji:"❓"}</div>
@@ -1008,74 +1023,134 @@ export default function App(){
         <div style={{textAlign:"center",marginTop:12,fontSize:11,color:"#94a3b8"}}>{myBadges.length}/{DEFAULT_BADGES.length} תגים נפתחו</div>
       </>;})()}
 
-      {/* ══ DASHBOARD ══ */}
-      {screen==="dash"&&<>
-        <h2 style={S.st}>📊 דשבורד</h2>
-        {/* LEADERBOARD */}
-        <div style={{background:"linear-gradient(135deg,#fef3c7,#fef9c3)",borderRadius:14,padding:14,marginBottom:12,border:"1px solid #f59e0b40"}}>
-          <div style={{fontSize:13,fontWeight:800,color:"#1e293b",marginBottom:8,textAlign:"center"}}>🏆 לוח תוצאות שבועי</div>
-          {(()=>{const wd=getWeeklyXpData();const ranked=[...CH].sort((a,b)=>(wd[b]||0)-(wd[a]||0));
-            return ranked.map((cid,idx)=>{const m=FAMILY[cid];const lv=getLevel(cid);return(
-              <div key={cid} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",marginBottom:4,
-                background:idx===0?"#fff":"#fffbeb80",borderRadius:10,border:idx===0?"2px solid #f59e0b":"1px solid #f59e0b20"}}>
-                <span style={{fontSize:18,minWidth:24}}>{idx===0?"👑":idx===1?"🥈":"🥉"}</span>
-                <span style={{fontSize:13,fontWeight:700,color:m.color,flex:1}}>{m.name}</span>
-                <span style={{fontSize:10,color:"#64748b"}}>{lv.emoji} • 🔥{streaks[cid]||0}</span>
-                <span style={{fontSize:14,fontWeight:800,color:"#f59e0b",background:"#f59e0b15",padding:"2px 8px",borderRadius:8}}>{wd[cid]||0} XP</span>
-              </div>);});
-          })()}
-        </div>
-        {CH.map(cid=>{const m=FAMILY[cid];const st=getWeekStats(cid);const lv=getLevel(cid);return(
-          <div key={cid} style={S.dc}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <div><div style={{fontSize:14,fontWeight:800,color:m.color}}>{m.name} {lv.emoji}</div>
-                  <div style={{fontSize:9,color:"#64748b"}}>{xp[cid]||0}XP • 🔥{streaks[cid]||0} רצף</div></div>
-              </div>
-              {m.weeklyPay>0&&<div style={{background:"linear-gradient(135deg,#10b981,#059669)",borderRadius:10,padding:"8px 12px",textAlign:"center"}}>
-                <div style={{fontSize:16,fontWeight:800,color:"#fff"}}>{st.earned}₪</div>
-                <div style={{fontSize:7,color:"#d1fae5"}}>מתוך {m.weeklyPay}₪</div>
-              </div>}
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-              <div style={{flex:1,height:6,background:"#f1f5f9",borderRadius:4,overflow:"hidden"}}>
-                <div style={{height:"100%",borderRadius:4,width:`${st.pct}%`,background:`linear-gradient(90deg,${m.color},${m.color}cc)`,transition:"width 0.5s"}}/>
-              </div>
-              <span style={{fontSize:11,fontWeight:700,color:"#94a3b8"}}>{st.pct}%</span>
-            </div>
-            <div style={{display:"flex",gap:4}}>
-              {[{n:st.tc,l:"סה״כ",c:"#1e293b"},{n:st.dc,l:"בוצעו",c:"#f59e0b"},{n:st.ac,l:"אושרו",c:"#10b981"},{n:st.tc-st.dc,l:"חסרים",c:"#ef4444"}].map((s,i)=>(
-                <div key={i} style={{flex:1,background:"#f1f5f9",borderRadius:7,padding:"5px 2px",textAlign:"center"}}>
-                  <div style={{fontSize:13,fontWeight:800,color:s.c}}>{s.n}</div><div style={{fontSize:7,color:"#64748b"}}>{s.l}</div>
-                </div>
-              ))}
-            </div>
+      {/* ══ REPORTS ══ */}
+      {screen==="dash"&&isP&&(()=>{
+        const wc=getWeekCompletionCount();const wcPct=wc.total>0?Math.round((wc.done/wc.total)*100):0;
+        const leading=getLeadingChild();const famStreak=getFamilyStreak();const weekXp=getWeekXpTotal();
+        const heatmap=getHeatmapData();const heatMax=Math.max(1,...heatmap.flat());
+        const achievements=getRecentAchievements();
+        return<>
+        <h2 style={S.st}>📊 דוחות וסטטיסטיקות</h2>
+
+        {/* SummaryCards 2x2 */}
+        <div style={S.rpGrid}>
+          <div style={{...S.rpCard,background:"linear-gradient(135deg,#ecfdf5,#d1fae5)"}}>
+            <div style={S.rpBig}>{wc.done}/{wc.total}</div>
+            <div style={{fontSize:16,fontWeight:800,color:"#10b981"}}>{wcPct}%</div>
+            <div style={S.rpLabel}>משימות הושלמו השבוע</div>
           </div>
-        );})}
-        <div style={{background:"linear-gradient(135deg,#ede9fe,#ddd6fe)",borderRadius:14,padding:14,border:"1px solid #4f46e580"}}>
-          <h3 style={{fontSize:13,fontWeight:800,color:"#1e293b",margin:"0 0 8px",textAlign:"center"}}>👨‍👩‍👧‍👦 סיכום</h3>
-          <div style={{display:"flex",gap:6}}>
-            {(()=>{let te=0,tp=0;CH.forEach(c=>{if(FAMILY[c].weeklyPay>0){te+=getWeekStats(c).earned;tp+=FAMILY[c].weeklyPay;}});
-              return[{v:`${te}₪`,l:"הורווח",c:"#10b981"},{v:`${tp}₪`,l:"מקסימום",c:"#6366f1"},{v:`${getFamilyPct()}%`,l:"משפחתי",c:"#f59e0b"}].map((s,i)=>(
-                <div key={i} style={{flex:1,background:"rgba(99,102,241,0.08)",borderRadius:10,padding:10,textAlign:"center"}}>
-                  <div style={{fontSize:16,fontWeight:800,color:s.c}}>{s.v}</div><div style={{fontSize:8,color:"#7c3aed"}}>{s.l}</div>
-                </div>
-              ));
-            })()}
+          <div style={{...S.rpCard,background:"linear-gradient(135deg,#fef3c7,#fffbeb)"}}>
+            <div style={{fontSize:28}}>{FAMILY[leading]?.emoji}</div>
+            <div style={{fontSize:16,fontWeight:800,color:FAMILY[leading]?.color}}>{FAMILY[leading]?.name}</div>
+            <div style={S.rpLabel}>הילד/ה המוביל/ה 🏆</div>
+          </div>
+          <div style={{...S.rpCard,background:"linear-gradient(135deg,#fff7ed,#ffedd5)"}}>
+            <div style={S.rpBig}>{famStreak}</div>
+            <div style={{fontSize:11,color:"#ea580c",fontWeight:700}}>ימים</div>
+            <div style={S.rpLabel}>סטריק משפחתי 🔥</div>
+          </div>
+          <div style={{...S.rpCard,background:"linear-gradient(135deg,#ede9fe,#ddd6fe)"}}>
+            <div style={S.rpBig}>{weekXp}</div>
+            <div style={{fontSize:11,color:"#7c3aed",fontWeight:700}}>XP</div>
+            <div style={S.rpLabel}>נקודות חולקו השבוע</div>
           </div>
         </div>
-        {/* Exam history */}
-        {exams.length>0&&<div style={{background:"#ffffff",borderRadius:14,padding:14,marginTop:12,border:"1px solid #6366f140"}}>
-          <div style={{fontSize:13,fontWeight:800,color:"#1e293b",marginBottom:8}}>📝 היסטוריית מבחנים</div>
+
+        {/* CompletionChart */}
+        <div style={S.rpSection}>
+          <div style={S.rpSt}>📊 ביצוע לפי ילד</div>
+          {CH.map(cid=>{const st=getWeekStats(cid);const m=FAMILY[cid];return(
+            <div key={cid} style={{marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
+                <span style={{fontSize:11,fontWeight:700,color:m.color}}>{m.emoji} {m.name}</span>
+                <span style={{fontSize:12,fontWeight:800,color:m.color}}>{st.pct}%</span>
+              </div>
+              <div style={S.rpBarBg}>
+                <div style={{...S.rpBar,width:`${st.pct}%`,background:`linear-gradient(90deg,${m.color},${m.color}cc)`}}/>
+              </div>
+              <div style={{display:"flex",gap:4,fontSize:9,color:"#64748b"}}>
+                <span>בוצעו: {st.dc}</span><span>•</span><span>אושרו: {st.ac}</span><span>•</span><span>חסרים: {st.tc-st.dc}</span>
+                {m.weeklyPay>0&&<><span>•</span><span style={{color:"#10b981",fontWeight:700}}>{st.earned}₪/{m.weeklyPay}₪</span></>}
+              </div>
+            </div>
+          );})}
+        </div>
+
+        {/* WeeklyHeatmap */}
+        <div style={S.rpSection}>
+          <div style={S.rpSt}>🗓️ מתי מבוצעות משימות</div>
+          <div style={S.rpHeatGrid}>
+            {/* Header row */}
+            <div/>
+            {Array.from({length:24},(_, h)=>
+              <div key={h} style={{textAlign:"center",color:"#94a3b8",fontSize:7,lineHeight:"12px"}}>{h%6===0?h:""}</div>
+            )}
+            {/* Day rows */}
+            {[0,1,2,3,4,5,6].map(day=><div key={day} style={{display:"contents"}}>
+              <div style={{fontSize:9,color:"#64748b",display:"flex",alignItems:"center",fontWeight:600}}>{DS[day]}</div>
+              {heatmap[day].map((count,h)=>{
+                const intensity=count>0?Math.min(1,count/heatMax*1.5):0;
+                return<div key={h} style={{...S.rpHeatCell,background:intensity>0?`rgba(99,102,241,${0.15+intensity*0.75})`:"#f1f5f9",
+                  borderRadius:2}} title={`${DS[day]} ${h}:00 — ${count} משימות`}/>;
+              })}
+            </div>)}
+          </div>
+          <div style={{display:"flex",justifyContent:"center",gap:8,marginTop:6,fontSize:8,color:"#94a3b8"}}>
+            <span>פחות</span>
+            {[0,0.25,0.5,0.75,1].map((v,i)=><div key={i} style={{width:10,height:10,borderRadius:2,background:v===0?"#f1f5f9":`rgba(99,102,241,${0.15+v*0.75})`}}/>)}
+            <span>יותר</span>
+          </div>
+        </div>
+
+        {/* StreakStatus */}
+        <div style={S.rpSection}>
+          <div style={S.rpSt}>🔥 סטריקים</div>
+          {CH.map(cid=>{const s=streaks[cid]||0;const m=FAMILY[cid];const pct=Math.min(100,Math.round(s/30*100));return(
+            <div key={cid} style={{marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
+                <span style={{fontSize:11,fontWeight:700,color:m.color}}>{m.emoji} {m.name}</span>
+                <span style={{fontSize:12,fontWeight:800,color:"#f59e0b"}}>{s} ימים</span>
+              </div>
+              <div style={{position:"relative"}}>
+                <div style={S.rpBarBg}>
+                  <div style={{...S.rpBar,width:`${pct}%`,background:"linear-gradient(90deg,#f59e0b,#ef4444)"}}/>
+                </div>
+                {/* Milestone markers */}
+                <div style={{position:"absolute",top:-2,right:`${100-Math.round(7/30*100)}%`,fontSize:10,transform:"translateX(50%)"}} title="7 ימים">🔥</div>
+                <div style={{position:"absolute",top:-2,right:"0%",fontSize:10,transform:"translateX(50%)"}} title="30 ימים">⭐</div>
+              </div>
+            </div>
+          );})}
+        </div>
+
+        {/* Recent Achievements */}
+        <div style={S.rpSection}>
+          <div style={S.rpSt}>🏅 הישגים אחרונים</div>
+          {achievements.length===0?<div style={{textAlign:"center",padding:12,color:"#94a3b8",fontSize:11}}>עדיין אין הישגים</div>
+          :achievements.slice(0,10).map((a,i)=>(
+            <div key={i} style={S.rpAchieve}>
+              <span style={{fontSize:22}}>{a.badge.emoji}</span>
+              <div style={{flex:1}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#1e293b"}}>{a.badge.title}</div>
+                <div style={{fontSize:9,color:"#64748b"}}>{FAMILY[a.childId]?.name} • {a.badge.desc}</div>
+              </div>
+              {a.ts>0&&<span style={{fontSize:8,color:"#94a3b8"}}>{new Date(a.ts).toLocaleDateString("he-IL")}</span>}
+            </div>
+          ))}
+        </div>
+
+        {/* Exam history (retained) */}
+        {exams.length>0&&<div style={S.rpSection}>
+          <div style={S.rpSt}>📝 היסטוריית מבחנים</div>
           {exams.slice().reverse().slice(0,10).map(ex=>(
-            <div key={ex.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderBottom:"1px solid #e2e8f0"}}>
+            <div key={ex.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderBottom:"1px solid #f1f5f9"}}>
               <span style={{fontSize:13,fontWeight:700,color:FAMILY[ex.childId]?.color}}>{FAMILY[ex.childId]?.name}</span>
               <span style={{flex:1,fontSize:11,color:"#64748b"}}>ציון {ex.score}</span>
               <span style={{fontSize:12,fontWeight:700,color:"#10b981"}}>+{ex.bonus}₪</span>
             </div>
           ))}
         </div>}
-      </>}
+      </>;})()}
 
       {/* ══ APPROVE ══ */}
       {screen==="approve"&&isP&&(()=>{
@@ -1511,4 +1586,15 @@ const S={
   md:{background:"#ffffff",borderRadius:16,padding:18,width:"100%",maxWidth:300,border:"1px solid #e2e8f0",direction:"rtl",maxHeight:"88vh",overflowY:"auto",boxShadow:"0 20px 40px rgba(0,0,0,0.12)"},
   mt:{fontSize:14,fontWeight:800,color:"#1e293b",margin:"0 0 8px",textAlign:"center"},
   mc:{width:"100%",padding:6,background:"transparent",border:"none",color:"#94a3b8",fontSize:10,cursor:"pointer"},
+  rpGrid:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14},
+  rpCard:{background:"#ffffff",borderRadius:12,padding:14,textAlign:"center",border:"1px solid #e2e8f0",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"},
+  rpBig:{fontSize:24,fontWeight:800,color:"#1e293b",marginBottom:0},
+  rpLabel:{fontSize:9,color:"#64748b",fontWeight:600,marginTop:4},
+  rpSection:{background:"#ffffff",borderRadius:14,padding:14,marginBottom:12,border:"1px solid #e2e8f0"},
+  rpSt:{fontSize:13,fontWeight:800,color:"#1e293b",marginBottom:10,textAlign:"center"},
+  rpBar:{height:18,borderRadius:6,transition:"width 0.5s ease"},
+  rpBarBg:{height:18,background:"#f1f5f9",borderRadius:6,overflow:"hidden",marginBottom:4},
+  rpHeatCell:{width:"100%",aspectRatio:"1",borderRadius:2,minWidth:0},
+  rpHeatGrid:{display:"grid",gridTemplateColumns:"28px repeat(24,1fr)",gap:1,fontSize:7},
+  rpAchieve:{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid #f1f5f9"},
 };
