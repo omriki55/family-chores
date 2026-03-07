@@ -187,6 +187,9 @@ export default function App(){
   const[exams,setExams]=useState([]);
   const[examModal,setExamModal]=useState(null);
   const[examScore,setExamScore]=useState("");
+  // Family Wall
+  const[wallText,setWallText]=useState("");
+  const[wallTo,setWallTo]=useState("wall");
 
   const fileRef=useRef(null);
   const bonusFileRef=useRef(null);
@@ -196,7 +199,7 @@ export default function App(){
     if(d.tasks)setTasks(d.tasks);if(d.completions)setCompletions(d.completions);if(d.pins)setPins(d.pins);
     if(d.xp)setXp(d.xp);if(d.streaks)setStreaks(d.streaks);if(d.goals)setGoals(d.goals);
     if(d.swaps)setSwaps(d.swaps);if(d.activeReminders)setActiveReminders(d.activeReminders);
-    if(d.messages)setMessages(d.messages);if(d.penalties)setPenalties(d.penalties);
+    if(d.messages)setMessages(d.messages.map(m=>({...m,type:m.type||"praise",reactions:m.reactions||{}})));if(d.penalties)setPenalties(d.penalties);
     if(d.earnedBadges)setEarnedBadges(d.earnedBadges);if(d.totalXpEarned)setTotalXpEarned(d.totalXpEarned);
     if(d.approvedCount)setApprovedCount(d.approvedCount);if(d.exams)setExams(d.exams);
   }}catch{}})();},[]);
@@ -232,7 +235,8 @@ export default function App(){
     const newXp={...xp,[cid]:(xp[cid]||0)+amount};
     setXp(newXp);
     const newLv=LEVELS.slice().reverse().find(l=>(newXp[cid]||0)>=l.min);
-    if(newLv&&newLv.min>oldLv.min){setLevelUpInfo(newLv);setTimeout(()=>setLevelUpInfo(null),3000);}
+    if(newLv&&newLv.min>oldLv.min){setLevelUpInfo(newLv);setTimeout(()=>setLevelUpInfo(null),3000);
+      const sm=addSystemMessage(`${FAMILY[cid]?.name} עלה/תה לרמה ${newLv.name}! ${newLv.emoji}`,"⬆️");setMessages(sm);}
     return newXp;
   };
 
@@ -270,7 +274,8 @@ export default function App(){
     // Check if all tasks done today
     const allToday=tasks.filter(t=>isTaskForChild(t,cid,day)&&!t.bonus);
     const allDone=allToday.every(t=>{const kk=t.id===tid?k:cKey(t.id,cid,day);return nc[kk]?.done;});
-    if(allDone){setShowConfetti(true);setTimeout(()=>setShowConfetti(false),3000);}
+    if(allDone){setShowConfetti(true);setTimeout(()=>setShowConfetti(false),3000);
+      const sm=addSystemMessage(`${FAMILY[cid]?.name} סיים/ה את כל המשימות! 🎉`,"🎉");setMessages(sm);save({completions:nc,messages:sm});flash("✅ בוצע!");return;}
     save({completions:nc});flash("✅ בוצע!");
   };
 
@@ -397,6 +402,32 @@ export default function App(){
     save({xp:newXp,penalties:np,messages:nm});flash(`⚠️ -${p.xp}XP`);setPenaltyModal(null);
   };
 
+  // ── Family Wall functions ──
+  const sendWallMessage=(text,to="wall")=>{
+    if(!text.trim())return;
+    const nm=[...messages,{id:"msg_"+Date.now(),from:user,to,text:text.trim(),star:null,ts:Date.now(),type:"free",reactions:{}}];
+    setMessages(nm);save({messages:nm});setWallText("");flash("💬 נשלח!");
+  };
+  const sendNudge=(childId)=>{
+    if(messages.some(m=>m.type==="nudge"&&m.to===childId&&(Date.now()-m.ts)<1800000)){flash("⏳ כבר נשלח לאחרונה");return;}
+    const pending=tasks.filter(t=>isTaskForChild(t,childId,getToday())&&!t.bonus&&!completions[cKey(t.id,childId,getToday())]?.done).length;
+    const nm=[...messages,{id:"msg_"+Date.now(),from:user,to:childId,text:`👋 תזכורת עדינה: יש לך ${pending} משימ${pending===1?"ה":"ות"} להיום`,star:"👋",ts:Date.now(),type:"nudge",reactions:{}}];
+    setMessages(nm);save({messages:nm});flash(`👋 נשלח ל${FAMILY[childId]?.name}`);
+  };
+  const addSystemMessage=(text,star="🎉",curMessages)=>{
+    const base=curMessages||messages;
+    return[...base,{id:"msg_"+Date.now(),from:"system",to:"wall",text,star,ts:Date.now(),type:"system",reactions:{}}];
+  };
+  const toggleReaction=(msgId,emoji)=>{
+    const nm=messages.map(m=>{if(m.id!==msgId)return m;const reactions={...(m.reactions||{})};
+      const users=reactions[emoji]||[];
+      if(users.includes(user)){reactions[emoji]=users.filter(u=>u!==user);if(reactions[emoji].length===0)delete reactions[emoji];}
+      else{reactions[emoji]=[...users,user];}
+      return{...m,reactions};});
+    setMessages(nm);save({messages:nm});
+  };
+  const getWallMessages=()=>messages.filter(m=>m.to==="wall"||m.from===user||m.to===user).sort((a,b)=>b.ts-a.ts).slice(0,50);
+
   const verifyPin=(uid,pin)=>{const correct=pins[uid]||DEFAULT_PINS[uid];
     if(pin===correct){setUser(uid);setPinScreen(null);setPinInput("");setPinError(false);setScreen("home");}
     else{setPinError(true);setPinInput("");}};
@@ -470,13 +501,14 @@ export default function App(){
 
       {/* TABS */}
       <div style={S.tabs}>
-        {[
-          {id:"home",l:"🏠"},{id:"tasks",l:"📋"},
+        {(()=>{const wallUnread=messages.filter(m=>(m.to==="wall"||m.to===user)&&m.from!==user&&(Date.now()-m.ts)<86400000).length;
+        return[
+          {id:"home",l:"🏠"},{id:"wall",l:wallUnread>0?"💬":"💬",badge:wallUnread},{id:"tasks",l:"📋"},
           ...(!isP?[{id:"badges",l:"🏅"}]:[]),
           {id:"dash",l:"📊"},
           ...(isP?[{id:"approve",l:"✅"},{id:"manage",l:"⚙️"}]:[]),
         ].map(t=><button key={t.id} onClick={()=>setScreen(t.id)}
-          style={{...S.tab,...(screen===t.id?S.tabA:{})}}>{t.l}</button>)}
+          style={{...S.tab,...(screen===t.id?S.tabA:{}),position:"relative"}}>{t.l}{t.badge>0&&<span style={{position:"absolute",top:2,right:2,width:8,height:8,borderRadius:4,background:"#ef4444"}}/>}</button>);})()}
       </div>
 
       <div style={S.content}>
@@ -504,29 +536,22 @@ export default function App(){
             <div style={{fontSize:11,color:"#94a3b8"}}>יום {DAYS[today]}</div>
           </div>
 
-          {/* Praise messages */}
+          {/* Wall teaser */}
           {!isP&&(()=>{
-            const myMsgs=messages.filter(m=>m.to===user).sort((a,b)=>b.ts-a.ts).slice(0,5);
+            const myMsgs=messages.filter(m=>m.to===user||m.to==="wall").sort((a,b)=>b.ts-a.ts);
+            const unread=myMsgs.filter(m=>m.from!==user&&(Date.now()-m.ts)<86400000).length;
             if(myMsgs.length===0)return null;
             return(
-              <div style={{marginBottom:12}}>
-                <div style={{fontSize:13,fontWeight:700,color:"#1e293b",marginBottom:6}}>💬 הודעות מההורים</div>
-                {myMsgs.map(msg=>{const task=tasks.find(t=>t.id===msg.taskId);const from=FAMILY[msg.from];
-                  const isNew=(Date.now()-msg.ts)<86400000;
-                  return(
-                    <div key={msg.id} style={{background:isNew?"linear-gradient(135deg,#fef3c7,#fffbeb)":"#ffffff",borderRadius:10,padding:10,marginBottom:4,border:isNew?"1px solid #f59e0b40":"1px solid #e2e8f0",display:"flex",alignItems:"flex-start",gap:8}}>
-                      {msg.star&&<span style={{fontSize:20}}>{msg.star}</span>}
-                      <div style={{flex:1}}>
-                        {msg.text&&<div style={{fontSize:12,color:"#1e293b",fontWeight:600}}>"{msg.text}"</div>}
-                        <div style={{fontSize:9,color:"#94a3b8",marginTop:2}}>
-                          {from?.name} • {task?.icon} {task?.title}
-                          {isNew&&<span style={{color:"#f59e0b",fontWeight:700}}> חדש!</span>}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              <button onClick={()=>setScreen("wall")} style={{width:"100%",background:unread>0?"linear-gradient(135deg,#fef3c7,#fffbeb)":"#ffffff",borderRadius:12,padding:10,marginBottom:10,border:unread>0?"1px solid #f59e0b40":"1px solid #e2e8f0",cursor:"pointer",textAlign:"right"}}>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{fontSize:18}}>💬</span>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12,fontWeight:700,color:"#1e293b"}}>קיר משפחתי{unread>0&&<span style={{color:"#f59e0b"}}> ({unread} חדשות)</span>}</div>
+                    <div style={{fontSize:10,color:"#94a3b8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{myMsgs[0]?.text?.slice(0,40)}</div>
+                  </div>
+                  <span style={{color:"#6366f1",fontSize:10}}>←</span>
+                </div>
+              </button>
             );
           })()}
 
@@ -632,6 +657,7 @@ export default function App(){
                         </div>
                         <div style={{fontSize:10,color:"#64748b"}}>היום: {todayPct}% • שבוע: {st.pct}% {m.weeklyPay>0?`• ${st.earned}₪`:""}  </div>
                       </div>
+                      <button onClick={()=>sendNudge(cid)} style={{width:30,height:30,background:"#6366f115",border:"1px solid #6366f130",borderRadius:8,color:"#6366f1",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",marginLeft:4}}>👋</button>
                       <button onClick={()=>setPenaltyModal({childId:cid})} style={{width:30,height:30,background:"#ef444415",border:"1px solid #ef444430",borderRadius:8,color:"#ef4444",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",marginLeft:4}}>⚠️</button>
                       <div style={{width:36,height:36,borderRadius:18,border:`3px solid ${todayPct===100?"#10b981":todayPct>50?m.color:"#e2e8f0"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:"#1e293b"}}>{todayPct}%</div>
                     </div>
@@ -684,6 +710,72 @@ export default function App(){
               );
             })}
           </div>
+        </>
+      )}
+
+      {/* ══ WALL ══ */}
+      {screen==="wall"&&(
+        <>
+          <h2 style={S.st}>💬 קיר משפחתי</h2>
+          {/* Compose area */}
+          <div style={{background:"#ffffff",borderRadius:12,padding:10,marginBottom:10,border:"1px solid #e2e8f0"}}>
+            {isP&&<div style={{display:"flex",gap:4,marginBottom:6,flexWrap:"wrap"}}>
+              <button onClick={()=>setWallTo("wall")} style={{padding:"4px 8px",borderRadius:8,fontSize:10,fontWeight:600,cursor:"pointer",background:wallTo==="wall"?"#6366f120":"#f8fafc",border:wallTo==="wall"?"2px solid #6366f1":"1px solid #e2e8f0",color:wallTo==="wall"?"#6366f1":"#64748b"}}>👨‍👩‍👧‍👦 כולם</button>
+              {CH.map(c=><button key={c} onClick={()=>setWallTo(c)} style={{padding:"4px 8px",borderRadius:8,fontSize:10,fontWeight:600,cursor:"pointer",background:wallTo===c?FAMILY[c].color+"20":"#f8fafc",border:wallTo===c?`2px solid ${FAMILY[c].color}`:"1px solid #e2e8f0",color:wallTo===c?FAMILY[c].color:"#64748b"}}>{FAMILY[c].name}</button>)}
+            </div>}
+            <div style={{display:"flex",gap:6}}>
+              <input style={{...S.inp,marginBottom:0,flex:1}} placeholder={isP?"כתוב/י הודעה...":"כתוב/י להורים..."} value={wallText} onChange={e=>setWallText(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")sendWallMessage(wallText,isP?wallTo:"wall");}}/>
+              <button onClick={()=>sendWallMessage(wallText,isP?wallTo:"wall")} style={{padding:"8px 14px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",border:"none",borderRadius:8,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>שלח</button>
+            </div>
+          </div>
+          {/* Nudge buttons - parent only */}
+          {isP&&(()=>{const nudgeBtns=CH.map(c=>{
+            const pending=tasks.filter(t=>isTaskForChild(t,c,getToday())&&!t.bonus&&!completions[cKey(t.id,c,getToday())]?.done).length;
+            if(pending===0)return null;
+            return<button key={c} onClick={()=>sendNudge(c)} style={{flex:1,padding:"6px 4px",background:FAMILY[c].color+"10",border:`1px solid ${FAMILY[c].color}40`,borderRadius:8,cursor:"pointer",textAlign:"center"}}>
+              <div style={{fontSize:10,fontWeight:700,color:FAMILY[c].color}}>👋 {FAMILY[c].name}</div>
+              <div style={{fontSize:8,color:"#94a3b8"}}>{pending} משימות</div>
+            </button>;
+          }).filter(Boolean);
+          return nudgeBtns.length>0?<div style={{display:"flex",gap:4,marginBottom:10}}>{nudgeBtns}</div>:null;})()}
+          {/* Message feed */}
+          {(()=>{const wm=getWallMessages();
+            if(wm.length===0)return<div style={{textAlign:"center",padding:30}}><div style={{fontSize:36}}>💬</div><div style={{color:"#94a3b8",fontSize:12,marginTop:4}}>עדיין אין הודעות. כתבו משהו!</div></div>;
+            return wm.map(msg=>{
+              const from=msg.from==="system"?null:FAMILY[msg.from];
+              const isSystem=msg.type==="system";const isNudge=msg.type==="nudge";
+              const isNew=(Date.now()-msg.ts)<86400000;
+              const task=msg.taskId?tasks.find(t=>t.id===msg.taskId):null;
+              const timeStr=new Date(msg.ts).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});
+              const dayAgo=Math.floor((Date.now()-msg.ts)/86400000);
+              const dateStr=dayAgo===0?"היום":dayAgo===1?"אתמול":new Date(msg.ts).toLocaleDateString("he-IL",{weekday:"short",day:"numeric",month:"short"});
+              return(
+                <div key={msg.id} style={{background:isSystem?"linear-gradient(135deg,#ede9fe,#ddd6fe)":isNudge?"linear-gradient(135deg,#fef3c7,#fffbeb)":"#ffffff",borderRadius:10,padding:10,marginBottom:4,border:isSystem?"1px solid #8b5cf640":isNudge?"1px solid #f59e0b40":isNew?"1px solid #6366f130":"1px solid #e2e8f0"}}>
+                  <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                    {msg.star&&<span style={{fontSize:18}}>{msg.star}</span>}
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:10,color:from?.color||"#8b5cf6",fontWeight:700}}>
+                        {isSystem?"🤖 מערכת":from?.name||""}
+                        {msg.to!=="wall"&&FAMILY[msg.to]&&msg.to!==user&&<span style={{color:"#94a3b8",fontWeight:400}}> → {FAMILY[msg.to]?.name}</span>}
+                      </div>
+                      <div style={{fontSize:12,color:"#1e293b",marginTop:2}}>{msg.text}</div>
+                      {task&&<div style={{fontSize:9,color:"#94a3b8",marginTop:2}}>{task.icon} {task.title}</div>}
+                      <div style={{fontSize:8,color:"#cbd5e1",marginTop:2}}>{dateStr} {timeStr}</div>
+                    </div>
+                  </div>
+                  {/* Reactions */}
+                  <div style={{display:"flex",gap:3,marginTop:6,flexWrap:"wrap"}}>
+                    {["👏","❤️","🔥","⭐","💪"].map(emoji=>{
+                      const reactors=(msg.reactions||{})[emoji]||[];const iReacted=reactors.includes(user);
+                      return<button key={emoji} onClick={()=>toggleReaction(msg.id,emoji)} style={{padding:"2px 6px",borderRadius:12,fontSize:11,background:iReacted?"#6366f115":"#f8fafc",border:iReacted?"1px solid #6366f150":"1px solid #e2e8f0",cursor:"pointer",display:"flex",alignItems:"center",gap:2}}>
+                        {emoji}{reactors.length>0&&<span style={{fontSize:9,color:"#64748b",fontWeight:600}}>{reactors.length}</span>}
+                      </button>;
+                    })}
+                  </div>
+                </div>
+              );
+            });
+          })()}
         </>
       )}
 
