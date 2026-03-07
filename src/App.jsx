@@ -287,7 +287,6 @@ export default function App(){
   if(pinScreen){const m=FAMILY[pinScreen];return(
     <div style={S.lw}><div style={{...S.lc,maxWidth:320}}>
       <button onClick={()=>{setPinScreen(null);setPinInput("");setPinError(false);}} style={{background:"none",border:"none",color:"#64748b",fontSize:13,cursor:"pointer",marginBottom:6}}>← חזרה</button>
-      <div style={{fontSize:44,marginBottom:6}}>{m.emoji}</div>
       <div style={{fontSize:18,fontWeight:800,color:m.color,marginBottom:2}}>{m.name}</div>
       <div style={{fontSize:12,color:"#94a3b8",marginBottom:16}}>סיסמה (4 ספרות)</div>
       <div style={{display:"flex",justifyContent:"center",gap:10,marginBottom:16}}>
@@ -340,7 +339,6 @@ export default function App(){
       <div style={S.header}>
         <div style={S.hTop}>
           <button onClick={()=>{setScreen("login");setUser(null);}} style={S.backBtn}>🔒</button>
-          <span style={{fontSize:18}}>{me.emoji}</span>
           <div style={{flex:1}}>
             <div style={{fontSize:14,fontWeight:700,color:"#f8fafc"}}>{me.name} {!isP&&getLevel(user)?.emoji}</div>
             <div style={{fontSize:9,color:"#a5b4fc"}}>{isP?"מנהל/ת":me.weeklyPay>0?`${me.weeklyPay}₪/שבוע`:getLevel(user)?.name}</div>
@@ -456,7 +454,6 @@ export default function App(){
                 return(
                   <div key={cid} style={{background:"#1e293b",borderRadius:12,padding:12,marginBottom:8,border:"1px solid #334155"}}>
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <span style={{fontSize:20}}>{m.emoji}</span>
                       <div style={{flex:1}}>
                         <div style={{display:"flex",alignItems:"center",gap:4}}>
                           <span style={{fontSize:13,fontWeight:700,color:m.color}}>{m.name}</span>
@@ -533,7 +530,7 @@ export default function App(){
             const dc=dt.filter(t=>completions[cKey(t.id,cid,selDay)]?.done).length;
             return(
               <div key={cid} style={{marginBottom:14}}>
-                <div style={S.secH}><span style={{fontSize:14}}>{m.emoji}</span><span style={{fontSize:13,fontWeight:700,color:m.color}}>{m.name}</span><span style={S.bdg}>{dc}/{dt.length}</span></div>
+                <div style={S.secH}><span style={{fontSize:13,fontWeight:700,color:m.color}}>{m.name}</span><span style={S.bdg}>{dc}/{dt.length}</span></div>
                 {dt.sort((a,b)=>b.weight-a.weight).map(task=>{
                   const k=cKey(task.id,cid,selDay);const comp=completions[k];const done=comp?.done;const appd=comp?.approved;
                   const wpct=dw>0?Math.round((task.weight/dw)*100):0;
@@ -595,7 +592,6 @@ export default function App(){
           <div key={cid} style={S.dc}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <span style={{fontSize:20}}>{m.emoji}</span>
                 <div><div style={{fontSize:14,fontWeight:800,color:m.color}}>{m.name} {lv.emoji}</div>
                   <div style={{fontSize:9,color:"#64748b"}}>{xp[cid]||0}XP • 🔥{streaks[cid]||0} רצף</div></div>
               </div>
@@ -645,7 +641,7 @@ export default function App(){
                 <span style={{fontSize:14}}>{p.t.icon}</span>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:12,fontWeight:700,color:"#f8fafc"}}>{p.t.title}{p.t.bonus?" ⭐":""}</div>
-                  <div style={{fontSize:9,color:"#94a3b8"}}>{FAMILY[p.c].emoji}{FAMILY[p.c].name} • {DAYS[p.d]} • {p.t.weight}נק׳</div>
+                  <div style={{fontSize:9,color:"#94a3b8"}}>{FAMILY[p.c].name} • {DAYS[p.d]} • {p.t.weight}נק׳</div>
                 </div>
                 {p.comp.photo&&<button onClick={()=>setPhotoModal({view:p.comp.photo})} style={S.vBtn}>🖼</button>}
               </div>
@@ -680,7 +676,7 @@ export default function App(){
                 </div>
                 <div style={{display:"flex",gap:3,marginBottom:6}}>
                   {CH.map(c=><button key={c} onClick={()=>{const a=t.assignedTo.includes(c)?t.assignedTo.filter(x=>x!==c):[...t.assignedTo,c];updateTask(t.id,{assignedTo:a});}}
-                    style={{...S.chip,...(t.assignedTo.includes(c)?{background:FAMILY[c].color+"20",borderColor:FAMILY[c].color,color:FAMILY[c].color}:{})}}>{FAMILY[c].emoji}{FAMILY[c].name}</button>)}
+                    style={{...S.chip,...(t.assignedTo.includes(c)?{background:FAMILY[c].color+"20",borderColor:FAMILY[c].color,color:FAMILY[c].color}:{})}}>{FAMILY[c].name}</button>)}
                 </div>
                 <button onClick={()=>{setEditTask(null);save();flash("💾");}} style={{padding:"6px 14px",background:"#10b981",border:"none",borderRadius:7,color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>💾</button>
               </div>
@@ -713,7 +709,7 @@ export default function App(){
             </div>
             <div style={{display:"flex",gap:3,marginBottom:10}}>
               {CH.map(c=><button key={c} onClick={()=>{const a=newTask.assignedTo.includes(c)?newTask.assignedTo.filter(x=>x!==c):[...newTask.assignedTo,c];setNewTask({...newTask,assignedTo:a});}}
-                style={{...S.chip,...(newTask.assignedTo.includes(c)?{background:FAMILY[c].color+"20",borderColor:FAMILY[c].color,color:FAMILY[c].color}:{})}}>{FAMILY[c].emoji}{FAMILY[c].name}</button>)}
+                style={{...S.chip,...(newTask.assignedTo.includes(c)?{background:FAMILY[c].color+"20",borderColor:FAMILY[c].color,color:FAMILY[c].color}:{})}}>{FAMILY[c].name}</button>)}
             </div>
             <button onClick={addNewTask} style={{width:"100%",padding:10,background:"linear-gradient(135deg,#4f46e5,#6366f1)",border:"none",borderRadius:10,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>✨ הוסף</button>
           </div>
@@ -736,7 +732,7 @@ export default function App(){
         {manageSub==="weights"&&CH.map(cid=>{const m=FAMILY[cid];const ct=tasks.filter(t=>t.assignedTo.includes(cid)&&!t.bonus);const tw=ct.reduce((s,t)=>s+t.weight,0);return(
           <div key={cid} style={{background:"#1e293b",borderRadius:10,padding:12,marginBottom:6,border:"1px solid #334155"}}>
             <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
-              <span style={{fontSize:14}}>{m.emoji}</span><span style={{fontSize:12,fontWeight:700,color:m.color}}>{m.name}</span>
+              <span style={{fontSize:12,fontWeight:700,color:m.color}}>{m.name}</span>
               <span style={{marginRight:"auto",marginLeft:0,fontSize:10,color:"#64748b"}}>{tw}נק׳</span>
             </div>
             {ct.sort((a,b)=>b.weight-a.weight).map(t=>{const pct=tw>0?Math.round((t.weight/tw)*100):0;return(
@@ -785,7 +781,7 @@ export default function App(){
           <div key={id} style={{background:"#1e293b",borderRadius:10,padding:10,marginBottom:5,border:"1px solid #334155"}}>
             {changePinUser===id?(
               <div style={{display:"flex",alignItems:"center",gap:6}}>
-                <span style={{fontSize:16}}>{m.emoji}</span><span style={{fontSize:12,fontWeight:700,color:m.color}}>{m.name}</span>
+                <span style={{fontSize:12,fontWeight:700,color:m.color}}>{m.name}</span>
                 <input style={{...S.inp,marginBottom:0,width:70,textAlign:"center",padding:"5px"}} placeholder="4 ספרות" maxLength={4}
                   value={newPinVal} onChange={e=>setNewPinVal(e.target.value.replace(/\D/g,"").slice(0,4))} type="tel"/>
                 <button onClick={()=>updatePin(id,newPinVal)} style={{background:"#10b981",border:"none",borderRadius:6,color:"#fff",fontSize:10,padding:"5px 10px",cursor:"pointer"}}>💾</button>
@@ -793,7 +789,7 @@ export default function App(){
               </div>
             ):(
               <div style={{display:"flex",alignItems:"center",gap:6}}>
-                <span style={{fontSize:16}}>{m.emoji}</span><span style={{fontSize:12,fontWeight:700,color:m.color,flex:1}}>{m.name}</span>
+                <span style={{fontSize:12,fontWeight:700,color:m.color,flex:1}}>{m.name}</span>
                 <span style={{fontSize:10,color:"#475569",letterSpacing:3}}>••••</span>
                 <button onClick={()=>{setChangePinUser(id);setNewPinVal("");}} style={{padding:"4px 8px",background:"#6366f120",border:"1px solid #6366f150",borderRadius:6,color:"#a5b4fc",fontSize:10,cursor:"pointer"}}>שנה</button>
               </div>
@@ -814,7 +810,7 @@ export default function App(){
               {CH.filter(c=>c!==swapModal.from).map(c=>(
                 <button key={c} onClick={()=>{requestSwap(swapModal.taskId,swapModal.from,c);setSwapModal(null);}}
                   style={{padding:12,background:"#0f172a",border:"1px solid #334155",borderRadius:10,color:"#f8fafc",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
-                  <span style={{fontSize:20}}>{FAMILY[c].emoji}</span><span style={{fontWeight:700,color:FAMILY[c].color}}>{FAMILY[c].name}</span>
+                  <span style={{fontWeight:700,color:FAMILY[c].color}}>{FAMILY[c].name}</span>
                 </button>
               ))}
             </div>
