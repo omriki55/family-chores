@@ -12,9 +12,29 @@
     <link rel="manifest" href="/manifest.json" />
     <title>משימות המשפחה</title>
     <style>
+      :root {
+        --card: #ffffff;
+        --text: #1e293b;
+        --border: #e2e8f0;
+        --inputBg: #f8fafc;
+        --barBg: #f1f5f9;
+        --textSec: #94a3b8;
+        --textTer: #64748b;
+        --textQuat: #475569;
+        --loginBg: linear-gradient(140deg, #fef9f0, #f0e6ff 40%, #e0f2fe);
+        --appBg: linear-gradient(180deg, #fef9f0, #f0e6ff);
+        --shadow: rgba(0,0,0,0.08);
+        --overlay: rgba(0,0,0,0.4);
+      }
       * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-      body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; background: #0f172a; overflow-x: hidden; }
+      body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; background: var(--loginBg); overflow-x: hidden; }
       ::-webkit-scrollbar { width: 0; }
+      @keyframes screenIn { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
+      @keyframes listIn   { from { opacity:0; transform:translateX(12px) } to { opacity:1; transform:translateX(0) } }
+      @keyframes cardPop  { from { opacity:0; transform:scale(0.96) } to { opacity:1; transform:scale(1) } }
+      @keyframes toastSlide { from { opacity:0; transform:translateX(-50%) translateY(-10px) } to { opacity:1; transform:translateX(-50%) translateY(0) } }
+      @keyframes levelPop   { from { opacity:0; transform:scale(0.5) } to { opacity:1; transform:scale(1) } }
+      @keyframes levelBounce { 0%,100% { transform:translateY(0) } 50% { transform:translateY(-12px) } }
     </style>
   </head>
   <body>
