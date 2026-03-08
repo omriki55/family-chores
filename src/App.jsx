@@ -80,6 +80,21 @@ const DEFAULT_GOALS=[
   {id:"g2",title:"אפס החמצות",emoji:"💯",desc:"אף משימה לא פוספסה ביום",target:100,reward:"סרט ביחד 🎬",active:true},
 ];
 
+const GROCERY_CATEGORIES=[
+  {id:"fruits",name:"פירות וירקות",emoji:"🍎"},{id:"dairy",name:"חלב וגבינות",emoji:"🥛"},
+  {id:"meat",name:"בשר ודגים",emoji:"🥩"},{id:"bread",name:"לחם ומאפים",emoji:"🍞"},
+  {id:"snacks",name:"חטיפים ומתוקים",emoji:"🍫"},{id:"drinks",name:"שתייה",emoji:"🥤"},
+  {id:"cleaning",name:"ניקיון",emoji:"🧹"},{id:"other",name:"אחר",emoji:"📦"},
+];
+
+const compressImage=(file,maxW=600)=>new Promise(resolve=>{
+  const img=new Image();const url=URL.createObjectURL(file);
+  img.onload=()=>{const c=document.createElement("canvas");
+    const scale=Math.min(1,maxW/img.width);c.width=img.width*scale;c.height=img.height*scale;
+    c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+    URL.revokeObjectURL(url);resolve(c.toDataURL("image/jpeg",0.7));};
+  img.src=url;});
+
 const getWk=()=>{const n=new Date(),s=new Date(n.getFullYear(),0,1);return`${n.getFullYear()}-W${Math.ceil((n-s)/604800000)}`;};
 const getToday=()=>new Date().getDay();
 const getHour=()=>new Date().getHours();
@@ -148,7 +163,7 @@ export default function App(){
   const[manageSub,setManageSub]=useState("tasks");
   const[editTask,setEditTask]=useState(null);
   const[weightEdit,setWeightEdit]=useState(null);
-  const[newTask,setNewTask]=useState({title:"",icon:"✨",weight:5,assignedTo:[],type:"personal"});
+  const[newTask,setNewTask]=useState({title:"",icon:"✨",weight:5,assignedTo:[],type:"personal",requirePhoto:false});
   const[notifChild,setNotifChild]=useState(null);
   const[bonusModal,setBonusModal]=useState(false);
   const[bonusTitle,setBonusTitle]=useState("");
@@ -199,6 +214,15 @@ export default function App(){
   const[calEventModal,setCalEventModal]=useState(false);
   const[calNewEvent,setCalNewEvent]=useState({title:"",icon:"📌",type:"custom",recurring:null,members:[]});
 
+  // Grocery
+  const[groceries,setGroceries]=useState([]);
+  const[groceryInput,setGroceryInput]=useState("");
+  const[groceryCat,setGroceryCat]=useState("other");
+  const[groceryRecurring,setGroceryRecurring]=useState(false);
+  // PWA + Notifications
+  const[installReady,setInstallReady]=useState(false);
+  const deferredPrompt=useRef(null);
+
   const fileRef=useRef(null);
   const bonusFileRef=useRef(null);
   const wk=getWk();
@@ -211,7 +235,24 @@ export default function App(){
     if(d.earnedBadges){const migrated={};Object.keys(d.earnedBadges).forEach(cid=>{migrated[cid]=(d.earnedBadges[cid]||[]).map(b=>typeof b==='string'?{id:b,ts:0}:b);});setEarnedBadges(migrated);}if(d.totalXpEarned)setTotalXpEarned(d.totalXpEarned);
     if(d.approvedCount)setApprovedCount(d.approvedCount);if(d.exams)setExams(d.exams);
     if(d.calEvents)setCalEvents(d.calEvents);
+    if(d.groceries)setGroceries(d.groceries);
   }}catch{}})();},[]);
+
+  // PWA install prompt
+  useEffect(()=>{const h=(e)=>{e.preventDefault();deferredPrompt.current=e;setInstallReady(true);};
+    window.addEventListener("beforeinstallprompt",h);return()=>window.removeEventListener("beforeinstallprompt",h);},[]);
+  // Offline/online detection
+  useEffect(()=>{const off=()=>flash("📴 אין חיבור — עובד במצב לא מקוון");
+    const on=()=>flash("🌐 חזרת לרשת!");
+    window.addEventListener("offline",off);window.addEventListener("online",on);
+    return()=>{window.removeEventListener("offline",off);window.removeEventListener("online",on);};},[]);
+  // Browser notification interval
+  useEffect(()=>{if(!user||!("Notification" in window))return;
+    const iv=setInterval(()=>{if(Notification.permission!=="granted"||!user||FAMILY[user]?.role==="parent")return;
+      const h=getHour();const pending=tasks.filter(t=>isTaskForChild(t,user,getToday())&&!t.bonus&&!completions[`${getWk()}_${t.id}_${user}_${getToday()}`]?.done).length;
+      if(pending>0&&(h===7||h===14||h===19)){
+        try{new Notification("משימות המשפחה",{body:`יש לך ${pending} משימות ממתינות${(streaks[user]||0)>0?" • הסטריק שלך בסכנה! 🔥":""}`,icon:"/icon-192.png"});}catch{}}
+    },60000);return()=>clearInterval(iv);},[user,tasks,completions,streaks]);
 
   const save=useCallback(async(overrides={})=>{try{await storage.set("chores-v5",JSON.stringify({
     tasks:overrides.tasks||tasks,completions:overrides.completions||completions,pins:overrides.pins||pins,
@@ -220,8 +261,8 @@ export default function App(){
     messages:overrides.messages||messages,penalties:overrides.penalties||penalties,
     earnedBadges:overrides.earnedBadges||earnedBadges,totalXpEarned:overrides.totalXpEarned||totalXpEarned,
     approvedCount:overrides.approvedCount||approvedCount,exams:overrides.exams||exams,
-    calEvents:overrides.calEvents||calEvents,
-  }));}catch{}},[tasks,completions,pins,xp,streaks,goals,swaps,activeReminders,messages,penalties,earnedBadges,totalXpEarned,approvedCount,exams,calEvents]);
+    calEvents:overrides.calEvents||calEvents,groceries:overrides.groceries||groceries,
+  }));}catch{}},[tasks,completions,pins,xp,streaks,goals,swaps,activeReminders,messages,penalties,earnedBadges,totalXpEarned,approvedCount,exams,calEvents,groceries]);
 
   const flash=(m)=>{setToast(m);setTimeout(()=>setToast(null),2200);};
   const cKey=(tid,cid,day)=>`${wk}_${tid}_${cid}_${day}`;
@@ -436,13 +477,14 @@ export default function App(){
   const updateTask=(tid,u)=>{const nt=tasks.map(t=>t.id===tid?{...t,...u}:t);setTasks(nt);save({tasks:nt});};
   const changeWeight=(tid,d)=>{const t=tasks.find(x=>x.id===tid);if(t)updateTask(tid,{weight:Math.max(1,t.weight+d)});};
 
-  const handlePhoto=(e,tid,cid,day)=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
-    r.onload=(ev)=>{markDone(tid,cid,day,ev.target.result);};r.readAsDataURL(f);};
+  const handlePhoto=async(e,tid,cid,day)=>{const f=e.target.files[0];if(!f)return;
+    const compressed=await compressImage(f,600);markDone(tid,cid,day,compressed);};
   const submitBonus=()=>{if(!bonusTitle.trim()){flash("⚠️ תאר/י");return;}
     const id="bonus_"+Date.now();const nt=[...tasks,{id,title:bonusTitle,icon:bonusIcon,weight:5,assignedTo:[user],bonus:true}];
     const k=cKey(id,user,selDay);const nc={...completions,[k]:{done:true,photo:bonusPhoto,approved:false,approvedBy:null,ts:Date.now()}};
     setTasks(nt);setCompletions(nc);save({tasks:nt,completions:nc});setBonusModal(false);setBonusTitle("");setBonusIcon("⭐");setBonusPhoto(null);flash("⭐ נשלח!");};
-  const handleBonusPhoto=(e)=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=(ev)=>setBonusPhoto(ev.target.result);r.readAsDataURL(f);};
+  const handleBonusPhoto=async(e)=>{const f=e.target.files[0];if(!f)return;
+    const compressed=await compressImage(f,600);setBonusPhoto(compressed);};
 
   const approveWithPraise=(tid,cid,day)=>{setPraiseModal({taskId:tid,childId:cid,day});setPraiseText("");setPraiseStar("⭐");};
   const submitPraise=()=>{if(!praiseModal)return;const{taskId,childId,day}=praiseModal;
@@ -460,6 +502,17 @@ export default function App(){
     setMessages(nm);
     save({xp:newXp,penalties:np,messages:nm});flash(`⚠️ -${p.xp}XP`);setPenaltyModal(null);
   };
+
+  // Grocery functions
+  const addGroceryItem=()=>{if(!groceryInput.trim()){flash("⚠️ חסר שם מוצר");return;}
+    const ng=[...groceries,{id:"gr_"+Date.now(),title:groceryInput.trim(),category:groceryCat,bought:false,recurring:groceryRecurring,addedBy:user,ts:Date.now()}];
+    setGroceries(ng);save({groceries:ng});setGroceryInput("");setGroceryRecurring(false);flash("🛒 נוסף!");};
+  const toggleGroceryBought=(grId)=>{const ng=groceries.map(g=>g.id===grId?{...g,bought:!g.bought}:g);setGroceries(ng);save({groceries:ng});};
+  const deleteGroceryItem=(grId)=>{const ng=groceries.filter(g=>g.id!==grId);setGroceries(ng);save({groceries:ng});flash("🗑️");};
+  const clearBoughtGroceries=()=>{const recurring=groceries.filter(g=>g.bought&&g.recurring).map(g=>({...g,bought:false,ts:Date.now()}));
+    const remaining=groceries.filter(g=>!g.bought);const ng=[...remaining,...recurring];setGroceries(ng);save({groceries:ng});flash("🧹 נוקה!");};
+  const handleInstall=async()=>{if(!deferredPrompt.current)return;deferredPrompt.current.prompt();
+    await deferredPrompt.current.userChoice;deferredPrompt.current=null;setInstallReady(false);};
 
   // ── Family Wall functions ──
   const sendWallMessage=(text,to="wall")=>{
@@ -562,7 +615,7 @@ export default function App(){
       <div style={S.tabs}>
         {(()=>{const wallUnread=messages.filter(m=>(m.to==="wall"||m.to===user)&&m.from!==user&&(Date.now()-m.ts)<86400000).length;
         return[
-          {id:"home",l:"🏠"},{id:"wall",l:"💬",badge:wallUnread},{id:"cal",l:"📅"},{id:"tasks",l:"📋"},
+          {id:"home",l:"🏠"},{id:"wall",l:"💬",badge:wallUnread},{id:"cal",l:"📅"},{id:"grocery",l:"🛒"},{id:"tasks",l:"📋"},
           ...(!isP?[{id:"badges",l:"🏅"}]:[]),
           ...(isP?[{id:"dash",l:"📊"},{id:"approve",l:"✅"},{id:"manage",l:"⚙️"}]:[]),
         ].map(t=><button key={t.id} onClick={()=>setScreen(t.id)}
@@ -593,6 +646,22 @@ export default function App(){
             </div>
             <div style={{fontSize:11,color:"#94a3b8"}}>יום {DAYS[today]}</div>
           </div>
+
+          {/* PWA install prompt */}
+          {installReady&&<div style={{background:"linear-gradient(135deg,#6366f120,#8b5cf620)",border:"1px solid #6366f160",borderRadius:12,padding:12,marginBottom:10,display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:22}}>📲</span>
+            <div style={{flex:1}}><div style={{fontSize:12,fontWeight:700,color:"#6366f1"}}>להתקין את האפליקציה?</div>
+              <div style={{fontSize:9,color:"#64748b"}}>גישה מהירה מהטלפון</div></div>
+            <button onClick={handleInstall} style={{padding:"6px 12px",background:"#6366f1",border:"none",borderRadius:8,color:"#fff",fontSize:10,fontWeight:700,cursor:"pointer"}}>התקן</button>
+            <button onClick={()=>setInstallReady(false)} style={{background:"none",border:"none",color:"#94a3b8",cursor:"pointer",fontSize:14}}>✕</button>
+          </div>}
+
+          {/* Notification permission (child) */}
+          {!isP&&"Notification" in window&&Notification.permission==="default"&&<div style={{background:"#fff7ed",border:"1px solid #f59e0b40",borderRadius:12,padding:10,marginBottom:10,display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:18}}>🔔</span>
+            <div style={{flex:1,fontSize:10,color:"#92400e"}}>אפשר התראות לתזכורות</div>
+            <button onClick={()=>Notification.requestPermission()} style={{padding:"4px 10px",background:"#f59e0b",border:"none",borderRadius:6,color:"#fff",fontSize:9,fontWeight:700,cursor:"pointer"}}>אפשר</button>
+          </div>}
 
           {/* Wall teaser */}
           {!isP&&(()=>{
@@ -936,6 +1005,46 @@ export default function App(){
         );
       })()}
 
+      {/* ══ GROCERY ══ */}
+      {screen==="grocery"&&<>
+        <h2 style={S.st}>🛒 רשימת קניות</h2>
+        <div style={{background:"#ffffff",borderRadius:12,padding:10,marginBottom:10,border:"1px solid #e2e8f0"}}>
+          <div style={{display:"flex",gap:6,marginBottom:6}}>
+            <input style={{...S.inp,marginBottom:0,flex:1}} placeholder="מוצר חדש..." value={groceryInput}
+              onChange={e=>setGroceryInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")addGroceryItem();}}/>
+            <button onClick={addGroceryItem}
+              style={{padding:"8px 14px",background:"linear-gradient(135deg,#10b981,#059669)",border:"none",borderRadius:8,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>+ הוסף</button>
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:3,marginBottom:4}}>
+            {GROCERY_CATEGORIES.map(c=><button key={c.id} onClick={()=>setGroceryCat(c.id)}
+              style={{...S.chip,...(groceryCat===c.id?{borderColor:"#10b981",background:"#10b98115",color:"#10b981"}:{})}}>{c.emoji} {c.name}</button>)}
+          </div>
+          <button onClick={()=>setGroceryRecurring(!groceryRecurring)}
+            style={{padding:"4px 8px",borderRadius:8,fontSize:10,fontWeight:600,cursor:"pointer",
+              background:groceryRecurring?"#6366f120":"#f8fafc",border:groceryRecurring?"2px solid #6366f1":"1px solid #e2e8f0",
+              color:groceryRecurring?"#6366f1":"#64748b"}}>🔁 מוצר קבוע</button>
+        </div>
+        {GROCERY_CATEGORIES.filter(cat=>groceries.some(g=>g.category===cat.id)).map(cat=><div key={cat.id} style={{marginBottom:10}}>
+          <div style={{fontSize:12,fontWeight:700,color:"#1e293b",marginBottom:4}}>{cat.emoji} {cat.name}</div>
+          {groceries.filter(g=>g.category===cat.id).sort((a,b)=>a.bought-b.bought||b.ts-a.ts).map(g=><div key={g.id}
+            style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",background:g.bought?"#f8fafc":"#fff",borderRadius:8,marginBottom:2,border:"1px solid #e2e8f0"}}>
+            <button onClick={()=>toggleGroceryBought(g.id)}
+              style={{width:22,height:22,borderRadius:6,border:g.bought?"2px solid #10b981":"2px solid #cbd5e1",
+                background:g.bought?"#10b981":"transparent",color:"#fff",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              {g.bought?"✓":""}</button>
+            <span style={{flex:1,fontSize:12,color:g.bought?"#94a3b8":"#1e293b",textDecoration:g.bought?"line-through":"none"}}>{g.title}</span>
+            {g.recurring&&<span style={{fontSize:8,color:"#6366f1"}}>🔁</span>}
+            <span style={{fontSize:8,color:"#cbd5e1"}}>{FAMILY[g.addedBy]?.name}</span>
+            <button onClick={()=>deleteGroceryItem(g.id)} style={{background:"none",border:"none",color:"#ef4444",fontSize:11,cursor:"pointer"}}>🗑</button>
+          </div>)}
+        </div>)}
+        {groceries.length===0&&<div style={{textAlign:"center",padding:30}}><div style={{fontSize:36}}>🛒</div><div style={{color:"#94a3b8",fontSize:12,marginTop:4}}>הרשימה ריקה</div></div>}
+        {groceries.some(g=>g.bought)&&<button onClick={clearBoughtGroceries}
+          style={{width:"100%",padding:10,background:"#ef444420",border:"1px solid #ef444440",borderRadius:12,color:"#ef4444",fontSize:12,fontWeight:700,cursor:"pointer",marginTop:8}}>
+          🧹 נקה פריטים שנקנו</button>}
+        <div style={{textAlign:"center",marginTop:8,fontSize:10,color:"#94a3b8"}}>{groceries.filter(g=>!g.bought).length} פריטים • {groceries.filter(g=>g.bought).length} נקנו</div>
+      </>}
+
       {/* ══ TASKS ══ */}
       {screen==="tasks"&&(
         <>
@@ -1021,6 +1130,21 @@ export default function App(){
           })}
         </div>
         <div style={{textAlign:"center",marginTop:12,fontSize:11,color:"#94a3b8"}}>{myBadges.length}/{DEFAULT_BADGES.length} תגים נפתחו</div>
+        {(()=>{const myPens=(penalties||[]).filter(p=>p.childId===user).sort((a,b)=>b.ts-a.ts).slice(0,10);
+          if(!myPens.length)return null;
+          return<>
+            <h3 style={{...S.st,marginTop:16}}>⚠️ היסטוריית קנסות</h3>
+            {myPens.map((p,i)=>{const pen=PENALTIES.find(x=>x.id===p.penaltyId);return(
+              <div key={i} style={{background:"#fff",borderRadius:10,padding:10,marginBottom:5,border:"1px solid #fecaca",display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:18}}>{pen?.emoji||"⚠️"}</span>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:12,fontWeight:700,color:"#dc2626"}}>{pen?.label||"קנס"}</div>
+                  <div style={{fontSize:9,color:"#94a3b8"}}>{new Date(p.ts).toLocaleDateString("he-IL")}</div>
+                </div>
+                <span style={{fontSize:12,fontWeight:800,color:"#dc2626"}}>-{pen?.xp||0} XP</span>
+              </div>);
+            })}</>;
+        })()}
       </>;})()}
 
       {/* ══ REPORTS ══ */}
@@ -1201,6 +1325,10 @@ export default function App(){
                   {CH.map(c=><button key={c} onClick={()=>{const a=t.assignedTo.includes(c)?t.assignedTo.filter(x=>x!==c):[...t.assignedTo,c];updateTask(t.id,{assignedTo:a});}}
                     style={{...S.chip,...(t.assignedTo.includes(c)?{background:FAMILY[c].color+"20",borderColor:FAMILY[c].color,color:FAMILY[c].color}:{})}}>{FAMILY[c].name}</button>)}
                 </div>
+                <div style={{display:"flex",gap:4,marginBottom:6}}>
+                  <button onClick={()=>updateTask(t.id,{requirePhoto:!t.requirePhoto})}
+                    style={{...S.chip,...(t.requirePhoto?{borderColor:"#6366f1",background:"#6366f120",color:"#6366f1"}:{})}}>📷 חובה תמונה</button>
+                </div>
                 <button onClick={()=>{setEditTask(null);save();flash("💾");}} style={{padding:"6px 14px",background:"#10b981",border:"none",borderRadius:7,color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>💾</button>
               </div>
             ):(
@@ -1240,6 +1368,8 @@ export default function App(){
                   style={{flex:1,padding:"6px 4px",background:newTask.type===opt.v?"#6366f120":"#f8fafc",border:newTask.type===opt.v?"2px solid #6366f1":"1px solid #e2e8f0",borderRadius:8,color:newTask.type===opt.v?"#6366f1":"#64748b",fontSize:10,fontWeight:600,cursor:"pointer"}}>{opt.l}</button>
               ))}
             </div>
+            <button onClick={()=>setNewTask({...newTask,requirePhoto:!newTask.requirePhoto})}
+              style={{...S.chip,...(newTask.requirePhoto?{borderColor:"#6366f1",background:"#6366f120",color:"#6366f1"}:{}),marginBottom:10}}>📷 חובה תמונה</button>
             <button onClick={addNewTask} style={{width:"100%",padding:10,background:"linear-gradient(135deg,#4f46e5,#6366f1)",border:"none",borderRadius:10,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>✨ הוסף</button>
           </div>
         )}
@@ -1304,6 +1434,15 @@ export default function App(){
                 style={{padding:"6px 14px",background:active?"#10b981":"#f1f5f9",border:`1px solid ${active?"#10b98150":"#e2e8f0"}`,borderRadius:8,color:active?"#fff":"#64748b",fontSize:11,fontWeight:700,cursor:"pointer"}}>{active?"✓ פעיל":"כבוי"}</button>
             </div>
           );})}
+          <div style={{marginTop:12,padding:12,background:"#eff6ff",borderRadius:10,border:"1px solid #bfdbfe"}}>
+            <div style={{fontSize:12,fontWeight:700,color:"#1e40af",marginBottom:6}}>🔔 התראות דפדפן</div>
+            <p style={{fontSize:10,color:"#64748b",margin:"0 0 8px"}}>קבלו התראות כשיש משימות ממתינות (עובד כשהדפדפן פתוח)</p>
+            <button onClick={async()=>{if(!("Notification"in window)){flash("הדפדפן לא תומך בהתראות");return;}
+              const p=await Notification.requestPermission();flash(p==="granted"?"✅ התראות הופעלו!":"❌ ההתראות נחסמו");}}
+              style={{padding:"8px 16px",background:typeof Notification!=="undefined"&&Notification.permission==="granted"?"#10b981":"#6366f1",border:"none",borderRadius:8,color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+              {typeof Notification!=="undefined"&&Notification.permission==="granted"?"✅ התראות פעילות":"🔔 אפשר התראות"}
+            </button>
+          </div>
         </>}
 
         {manageSub==="pins"&&Object.entries(FAMILY).map(([id,m])=>(
@@ -1402,10 +1541,10 @@ export default function App(){
               style={{width:"100%",padding:12,background:"linear-gradient(135deg,#6366f1,#8b5cf6)",border:"none",borderRadius:10,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:6}}>
               📸 כן, לצלם!
             </button>
-            <button onClick={()=>{markDone(doneConfirm.taskId,doneConfirm.childId,doneConfirm.day,null);setDoneConfirm(null);}}
+            {!(tasks.find(t=>t.id===doneConfirm.taskId)?.requirePhoto)&&<button onClick={()=>{markDone(doneConfirm.taskId,doneConfirm.childId,doneConfirm.day,null);setDoneConfirm(null);}}
               style={{width:"100%",padding:10,background:"#10b981",border:"none",borderRadius:10,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:6}}>
               ✅ בלי תמונה
-            </button>
+            </button>}
             <button onClick={()=>setDoneConfirm(null)} style={S.mc}>ביטול</button>
           </div>
         </div>
