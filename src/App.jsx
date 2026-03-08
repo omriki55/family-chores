@@ -121,6 +121,9 @@ export default function App(){
   const[spentXp,setSpentXp]=useState(()=>Object.fromEntries(CH.map(c=>[c,0])));
   const[purchaseHistory,setPurchaseHistory]=useState([]);
   const[taskTemplates,setTaskTemplates]=useState([]);
+  const[isOffline,setIsOffline]=useState(!navigator.onLine);
+  const[needRefresh,setNeedRefresh]=useState(false);
+  const updateSW=useRef(null);
   const deferredPrompt=useRef(null);
   const fileRef=useRef(null);
   const bonusFileRef=useRef(null);
@@ -188,10 +191,19 @@ export default function App(){
 
   useEffect(()=>{const h=(e)=>{e.preventDefault();deferredPrompt.current=e;setInstallReady(true);};
     window.addEventListener("beforeinstallprompt",h);return()=>window.removeEventListener("beforeinstallprompt",h);},[]);
-  useEffect(()=>{const off=()=>flash("📴 אין חיבור — עובד במצב לא מקוון");
-    const on=()=>flash("🌐 חזרת לרשת!");
+  useEffect(()=>{const off=()=>{setIsOffline(true);flash("📴 אין חיבור — עובד במצב לא מקוון");};
+    const on=()=>{setIsOffline(false);flash("🌐 חזרת לרשת!");};
     window.addEventListener("offline",off);window.addEventListener("online",on);
     return()=>{window.removeEventListener("offline",off);window.removeEventListener("online",on);};},[]);
+  // ── PWA update detection ──
+  useEffect(()=>{if('serviceWorker' in navigator){
+    navigator.serviceWorker.ready.then(reg=>{reg.addEventListener('updatefound',()=>{
+      const newSW=reg.installing;if(newSW){newSW.addEventListener('statechange',()=>{
+        if(newSW.state==='installed'&&navigator.serviceWorker.controller){setNeedRefresh(true);updateSW.current=()=>{newSW.postMessage({type:'SKIP_WAITING'});window.location.reload();};}
+      });}
+    });});
+    let refreshing=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(!refreshing){refreshing=true;window.location.reload();}});
+  }},[]);
   useEffect(()=>{if(!user||!("Notification" in window))return;
     // Request notification permission on first login
     if(Notification.permission==="default"){Notification.requestPermission();}
@@ -640,6 +652,8 @@ export default function App(){
     locations,setLocations,
     // Dark mode
     darkMode,setDarkMode,
+    // PWA
+    isOffline,needRefresh,updateSW,
     // Rewards
     rewards,setRewards,spentXp,purchaseHistory,getSpendableXp,
     purchaseReward,addReward,toggleRewardActive,deleteReward,fulfillPurchase,
@@ -707,16 +721,17 @@ export default function App(){
 
   const me=FAMILY[user];const today=getToday();
 
+  const wallUnread=messages.filter(m=>(m.to==="wall"||m.to===user)&&m.from!==user&&(Date.now()-m.ts)<86400000).length;
+  const tabNames={home:"בית",wall:"הודעות",cal:"לוח שנה",meal:"ארוחות",grocery:"קניות",tasks:"משימות",badges:"הישגים",rewards:"פרסים",dash:"דוחות",approve:"אישורים",manage:"הגדרות",counselor:"מיכאל"};
+  const tabList=[
+    {id:"home",l:"🏠"},{id:"wall",l:"💬",badge:wallUnread},{id:"cal",l:"📅"},{id:"meal",l:"🍽️"},{id:"grocery",l:"🛒"},{id:"tasks",l:"📋"},
+    ...(!isP?[{id:"badges",l:"🏅"},{id:"rewards",l:"🎁"}]:[]),
+    ...(isP?[{id:"dash",l:"📊"},{id:"approve",l:"✅"},{id:"manage",l:"⚙️"},{id:"counselor",l:"💡"}]:[]),
+  ];
+
   return(
-    <div style={S.app} dir="rtl">
+    <div className="app-shell" style={S.app} dir="rtl">
       <style>{`
-        :root{--card:#ffffff;--text:#1e293b;--border:#e2e8f0;--inputBg:#f8fafc;--barBg:#f1f5f9;--textSec:#94a3b8;--textTer:#64748b;--textQuat:#475569;
-          --loginBg:linear-gradient(140deg,#fef9f0,#f0e6ff 40%,#e0f2fe);--appBg:linear-gradient(180deg,#fef9f0,#f0e6ff);
-          --shadow:rgba(0,0,0,0.08);--overlay:rgba(0,0,0,0.4);}
-        @keyframes screenIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes listIn{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:translateX(0)}}
-        @keyframes cardPop{from{opacity:0;transform:scale(0.96)}to{opacity:1;transform:scale(1)}}
-        @keyframes toastSlide{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
         *:focus-visible{outline:2px solid #6366f1;outline-offset:2px;border-radius:4px;}
       `}</style>
       <Confetti show={showConfetti}/>
@@ -724,8 +739,19 @@ export default function App(){
       <BadgeEarned show={!!badgeNotification} badge={badgeNotification?.badge}/>
       {toast&&<div style={S.toast} role="status" aria-live="polite">{toast}</div>}
 
+      {/* Offline banner */}
+      {isOffline&&<div style={{background:"linear-gradient(135deg,#f59e0b,#d97706)",color:"#fff",textAlign:"center",padding:"6px 12px",fontSize:11,fontWeight:700,position:"sticky",top:0,zIndex:1001}}>
+        📴 מצב לא מקוון — שינויים ישמרו כשתחזור לרשת
+      </div>}
+
+      {/* Update available banner */}
+      {needRefresh&&<div style={{background:"linear-gradient(135deg,#6366f1,#8b5cf6)",color:"#fff",textAlign:"center",padding:"6px 12px",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:8,position:"sticky",top:isOffline?28:0,zIndex:1001}}>
+        🔄 גרסה חדשה זמינה
+        <button onClick={()=>updateSW.current&&updateSW.current()} style={{background:"#fff",color:"#6366f1",border:"none",borderRadius:6,padding:"3px 10px",fontSize:10,fontWeight:700,cursor:"pointer"}}>רענן</button>
+      </div>}
+
       {/* HEADER */}
-      <div style={S.header}>
+      <div className="app-header" style={S.header}>
         <div style={S.hTop}>
           <button onClick={()=>setDarkMode(d=>!d)} style={{...S.backBtn,fontSize:14}} aria-label="מצב כהה/בהיר">{darkMode?'☀️':'🌙'}</button>
           <button onClick={()=>{setScreen("login");setUser(null);}} style={S.backBtn} aria-label="נעילה — חזרה למסך כניסה">🔒</button>
@@ -737,19 +763,26 @@ export default function App(){
         </div>
       </div>
 
-      {/* TABS */}
-      <div style={S.tabs} role="tablist" aria-label="ניווט ראשי">
-        {(()=>{const wallUnread=messages.filter(m=>(m.to==="wall"||m.to===user)&&m.from!==user&&(Date.now()-m.ts)<86400000).length;
-        const tabNames={home:"בית",wall:"הודעות",cal:"לוח שנה",meal:"ארוחות",grocery:"קניות",tasks:"משימות",badges:"הישגים",rewards:"פרסים",dash:"דוחות",approve:"אישורים",manage:"הגדרות",counselor:"יועץ"};
-        return[
-          {id:"home",l:"🏠"},{id:"wall",l:"💬",badge:wallUnread},{id:"cal",l:"📅"},{id:"meal",l:"🍽️"},{id:"grocery",l:"🛒"},{id:"tasks",l:"📋"},
-          ...(!isP?[{id:"badges",l:"🏅"},{id:"rewards",l:"🎁"}]:[]),
-          ...(isP?[{id:"dash",l:"📊"},{id:"approve",l:"✅"},{id:"manage",l:"⚙️"},{id:"counselor",l:"💡"}]:[]),
-        ].map(t=><button key={t.id} onClick={()=>setScreen(t.id)} role="tab" aria-selected={screen===t.id} aria-label={tabNames[t.id]||t.id}
-          style={{...S.tab,...(screen===t.id?S.tabA:{}),position:"relative"}}><span aria-hidden="true">{t.l}</span>{t.badge>0&&<span style={{position:"absolute",top:2,right:2,width:8,height:8,borderRadius:4,background:"#ef4444"}} aria-label={`${t.badge} הודעות חדשות`}/>}</button>);})()}
+      {/* DESKTOP SIDEBAR */}
+      <nav className="app-sidebar">
+        {tabList.map(t=>(
+          <button key={t.id} onClick={()=>setScreen(t.id)}
+            className={`tab-btn${screen===t.id?' active':''}`}
+            aria-label={tabNames[t.id]||t.id}>
+            <span style={{fontSize:16}}>{t.l}</span>
+            <span>{tabNames[t.id]}</span>
+            {t.badge>0&&<span className="tab-badge"/>}
+          </button>
+        ))}
+      </nav>
+
+      {/* MOBILE TABS */}
+      <div className="mobile-tabs" style={S.tabs} role="tablist" aria-label="ניווט ראשי">
+        {tabList.map(t=><button key={t.id} onClick={()=>setScreen(t.id)} role="tab" aria-selected={screen===t.id} aria-label={tabNames[t.id]||t.id}
+          style={{...S.tab,...(screen===t.id?S.tabA:{}),position:"relative"}}><span aria-hidden="true">{t.l}</span>{t.badge>0&&<span style={{position:"absolute",top:2,right:2,width:8,height:8,borderRadius:4,background:"#ef4444"}} aria-label={`${t.badge} הודעות חדשות`}/>}</button>)}
       </div>
 
-      <div key={screen} style={{...S.content,animation:'screenIn 0.25s ease-out'}}>
+      <div className="app-content" key={screen} style={{...S.content,animation:'screenIn 0.25s ease-out'}}>
         {screen==="home"&&<HomeScreen S={S} app={app}/>}
         {screen==="wall"&&<WallScreen S={S} app={app}/>}
         {screen==="cal"&&<CalendarScreen S={S} app={app}/>}

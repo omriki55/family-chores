@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#6366f1" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -12,6 +12,7 @@
     <link rel="manifest" href="/manifest.json" />
     <title>משימות המשפחה</title>
     <style>
+      /* ── Theme Variables ── */
       :root {
         --card: #ffffff;
         --text: #1e293b;
@@ -40,26 +41,95 @@
         --shadow: rgba(0,0,0,0.3);
         --overlay: rgba(0,0,0,0.7);
       }
+
+      /* ── Base Reset ── */
       * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
       body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; background: var(--loginBg); overflow-x: hidden; }
       ::-webkit-scrollbar { width: 0; }
+
+      /* ── Animations ── */
       @keyframes screenIn { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
       @keyframes listIn   { from { opacity:0; transform:translateX(12px) } to { opacity:1; transform:translateX(0) } }
       @keyframes cardPop  { from { opacity:0; transform:scale(0.96) } to { opacity:1; transform:scale(1) } }
       @keyframes toastSlide { from { opacity:0; transform:translateX(-50%) translateY(-10px) } to { opacity:1; transform:translateX(-50%) translateY(0) } }
       @keyframes levelPop   { from { opacity:0; transform:scale(0.5) } to { opacity:1; transform:scale(1) } }
       @keyframes levelBounce { 0%,100% { transform:translateY(0) } 50% { transform:translateY(-12px) } }
+
+      /* ── Responsive Desktop Layout (768px+) ── */
+      @media (min-width: 768px) {
+        .app-shell {
+          max-width: 1200px;
+          margin: 0 auto;
+          display: grid !important;
+          grid-template-columns: 200px 1fr;
+          grid-template-rows: auto 1fr;
+          min-height: 100vh;
+        }
+        .app-header { grid-column: 1 / -1; }
+        .app-sidebar {
+          display: flex !important;
+          flex-direction: column;
+          gap: 2px;
+          padding: 12px 8px;
+          border-left: 1px solid var(--border);
+          position: sticky;
+          top: 0;
+          height: calc(100vh - 50px);
+          overflow-y: auto;
+          background: var(--appBg);
+        }
+        .app-sidebar .tab-btn {
+          display: flex;
+          align-items: center;
+          justify-content: flex-start;
+          gap: 8px;
+          padding: 10px 14px;
+          border-radius: 10px;
+          border: none;
+          border-bottom: none !important;
+          font-size: 13px;
+          cursor: pointer;
+          background: transparent;
+          color: var(--textSec);
+          font-weight: 600;
+          white-space: nowrap;
+          width: 100%;
+          text-align: right;
+          direction: rtl;
+          transition: all 0.2s;
+        }
+        .app-sidebar .tab-btn:hover {
+          background: rgba(99,102,241,0.06);
+        }
+        .app-sidebar .tab-btn.active {
+          background: rgba(99,102,241,0.12);
+          color: #6366f1;
+          font-weight: 700;
+        }
+        .app-sidebar .tab-badge {
+          width: 8px;
+          height: 8px;
+          border-radius: 4px;
+          background: #ef4444;
+          margin-right: auto;
+          margin-left: 0;
+        }
+        .app-content {
+          padding: 16px 24px 30px !important;
+          overflow-y: auto;
+          max-height: calc(100vh - 50px);
+        }
+        .mobile-tabs { display: none !important; }
+      }
+
+      /* ── Mobile: hide desktop sidebar ── */
+      @media (max-width: 767px) {
+        .app-sidebar { display: none !important; }
+      }
     </style>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').catch(() => {});
-        });
-      }
-    </script>
   </body>
 </html>
