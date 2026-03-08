@@ -15,7 +15,7 @@ export default function DoneConfirmModal({ S, app }) {
           style={{ width: "100%", padding: 12, background: "linear-gradient(135deg,#6366f1,#8b5cf6)", border: "none", borderRadius: 10, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 6 }}>
           📸 כן, לצלם!
         </button>
-        {!(tasks.find(t => t.id === doneConfirm.taskId)?.requirePhoto) && <button onClick={() => { markDone(doneConfirm.taskId, doneConfirm.childId, doneConfirm.day, null); setDoneConfirm(null); }}
+        {!(tasks.find(t => t.id === doneConfirm.taskId)?.requirePhoto) && <button onClick={() => { markDone(doneConfirm.taskId, doneConfirm.childId, doneConfirm.day, null, doneConfirm.timerBonus); setDoneConfirm(null); }}
           style={{ width: "100%", padding: 10, background: "#10b981", border: "none", borderRadius: 10, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 6 }}>
           ✅ בלי תמונה
         </button>}

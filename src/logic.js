@@ -9,9 +9,10 @@
  * @param {number|string} day - day number (0-6) or date string
  * @returns {boolean}
  */
-export function isTaskForChild(task, cid, day) {
+export function isTaskForChild(task, cid, day, dateStr) {
   if (!task.assignedTo.includes(cid)) return false;
   if (task.bonus) return true;
+  if (task.skippedDates && dateStr && task.skippedDates.includes(dateStr)) return false;
   if (task.activeDays) {
     const dn = typeof day === "number" ? day : new Date(day).getDay();
     if (!task.activeDays.includes(dn)) return false;
@@ -21,6 +22,10 @@ export function isTaskForChild(task, cid, day) {
     return kids[(typeof day === "number" ? day : new Date(day).getDay()) % kids.length] === cid;
   }
   return true;
+}
+
+export function isRecurringTask(task) {
+  return !task.bonus && task.activeDays !== null && task.activeDays.length > 0 && task.activeDays.length < 7;
 }
 
 /**

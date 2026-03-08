@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
-import { FAMILY, CH, SUGGESTED, REMINDERS, AUDIT_LABELS, DS } from '../../constants.js';
+import { FAMILY, CH, SUGGESTED, REMINDERS, AUDIT_LABELS, DS, RECURRENCE_PRESETS, DEFAULT_CHALLENGES } from '../../constants.js';
+import { t, getLang } from '../../i18n/index.js';
 
 const CONTEXT_REMINDER_PRESETS = [
   {icon:"⚽",text:"אל תשכח ציוד לכדורגל!"},
@@ -31,6 +32,15 @@ export default function ManageScreen({ S, app }) {
     purchaseHistory, fulfillPurchase,
     // Templates
     taskTemplates, saveAsTemplate, applyTemplate, deleteTemplate,
+    // Challenges
+    challenges, customChallenges, addCustomChallenge, deleteCustomChallenge,
+    wk,
+    // Child Reminders
+    childReminders, addChildReminder, toggleChildReminder, deleteChildReminder,
+    // UX
+    soundEnabled, setSoundEnabled,
+    // i18n
+    lang, setLang,
   } = app;
   const saveContextReminders = (r) => { setContextReminders(r); localStorage.setItem('family-context-reminders', JSON.stringify(r)); };
   const importFileRef = useRef(null);
@@ -90,6 +100,19 @@ export default function ManageScreen({ S, app }) {
   // ── Templates ──
   const [templateName, setTemplateName] = useState('');
 
+  // ── Per-child reminders ──
+  const [newRemChild, setNewRemChild] = useState(CH[0]||'');
+  const [newRemTime, setNewRemTime] = useState('16:00');
+  const [newRemLabel, setNewRemLabel] = useState('');
+
+  // ── Custom Challenges ──
+  const [newChTitle, setNewChTitle] = useState('');
+  const [newChEmoji, setNewChEmoji] = useState('🏆');
+  const [newChCondition, setNewChCondition] = useState('week_tasks_done');
+  const [newChValue, setNewChValue] = useState(10);
+  const [newChXpReward, setNewChXpReward] = useState(30);
+  const [newChType, setNewChType] = useState('individual');
+
   const handleExport = async () => {
     setExporting(true);
     try {
@@ -145,7 +168,7 @@ export default function ManageScreen({ S, app }) {
   return (
     <>
       <div style={{display:"flex",gap:3,marginBottom:12,overflowX:"auto",paddingBottom:2}} role="tablist" aria-label="הגדרות">
-        {[{id:"tasks",l:"📋",a:"משימות"},{id:"add",l:"➕",a:"הוספה"},{id:"suggest",l:"💡",a:"הצעות"},{id:"weights",l:"⚖️",a:"משקלות"},{id:"goals",l:"🎯",a:"יעדים"},{id:"reminders",l:"⏰",a:"תזכורות"},{id:"templates",l:"📄",a:"תבניות"},{id:"rewards",l:"🎁",a:"פרסים"},{id:"pins",l:"🔒",a:"קודים"},{id:"log",l:"📜",a:"יומן"},{id:"data",l:"💾",a:"גיבוי"}].map(t=>(
+        {[{id:"tasks",l:"📋",a:t("manage.tasks")},{id:"add",l:"➕",a:t("manage.add")},{id:"suggest",l:"💡",a:t("manage.suggest")},{id:"weights",l:"⚖️",a:t("manage.weights")},{id:"goals",l:"🎯",a:t("manage.goals")},{id:"challenges",l:"🏆",a:t("manage.challenges")},{id:"reminders",l:"⏰",a:t("manage.reminders")},{id:"templates",l:"📄",a:t("manage.templates")},{id:"rewards",l:"🎁",a:t("manage.rewards")},{id:"pins",l:"🔒",a:t("manage.pins")},{id:"log",l:"📜",a:t("manage.log")},{id:"data",l:"💾",a:t("manage.backup")},{id:"lang",l:"🌍",a:t("manage.language")}].map(t=>(
           <button key={t.id} onClick={()=>setManageSub(t.id)} role="tab" aria-selected={manageSub===t.id} aria-label={t.a}
             style={{...S.subT,...(manageSub===t.id?{background:"#6366f1",color:"#fff"}:{})}}><span aria-hidden="true">{t.l}</span></button>
         ))}
@@ -180,18 +203,34 @@ export default function ManageScreen({ S, app }) {
                   {CH.map(c=><button key={c} onClick={()=>{const a=t.assignedTo.includes(c)?t.assignedTo.filter(x=>x!==c):[...t.assignedTo,c];updateTask(t.id,{assignedTo:a});}}
                     style={{...S.chip,...(t.assignedTo.includes(c)?{background:FAMILY[c].color+"20",borderColor:FAMILY[c].color,color:FAMILY[c].color}:{})}}>{FAMILY[c].name}</button>)}
                 </div>
-                <div style={{display:"flex",gap:4,marginBottom:6}}>
+                <div style={{display:"flex",gap:4,marginBottom:6,flexWrap:"wrap"}}>
                   <button onClick={()=>updateTask(t.id,{requirePhoto:!t.requirePhoto})}
                     style={{...S.chip,...(t.requirePhoto?{borderColor:"#6366f1",background:"#6366f120",color:"#6366f1"}:{})}}>📷 חובה תמונה</button>
+                  <div style={{display:"flex",alignItems:"center",gap:3}}>
+                    <span style={{fontSize:9,color:"var(--textSec)"}}>⏱️ זמן:</span>
+                    <input type="number" value={t.timeLimit||''} onChange={e=>updateTask(t.id,{timeLimit:parseInt(e.target.value)||null})}
+                      placeholder="דק׳" style={{...S.inp,marginBottom:0,width:50,textAlign:"center",padding:"3px 4px",fontSize:10}} min="1"/>
+                    <span style={{fontSize:8,color:"var(--textTer)"}}>דק׳</span>
+                  </div>
                 </div>
                 <div style={{marginBottom:6}}>
-                  <div style={{fontSize:9,color:"var(--textSec)",marginBottom:3}}>ימים פעילים (ריק = כל יום):</div>
-                  <div style={{display:"flex",gap:3}}>
-                    {DS.map((d,i)=>{const active=t.activeDays?t.activeDays.includes(i):false;return(
-                      <button key={i} onClick={()=>{const cur=t.activeDays||[];const nd=active?cur.filter(x=>x!==i):[...cur,i];updateTask(t.id,{activeDays:nd.length===0||nd.length===7?null:nd.sort()});}}
-                        style={{width:28,height:28,fontSize:10,fontWeight:700,borderRadius:7,cursor:"pointer",border:active?"2px solid #6366f1":"1px solid var(--border)",background:active?"#6366f120":"var(--barBg)",color:active?"#6366f1":"var(--textTer)"}}>{d}</button>
+                  <div style={{fontSize:9,color:"var(--textSec)",marginBottom:3}}>🔄 תדירות:</div>
+                  <div style={{display:"flex",gap:3,marginBottom:6}}>
+                    {RECURRENCE_PRESETS.map(p=>{const sel=(t.recurrence||"daily")===p.id;return(
+                      <button key={p.id} onClick={()=>{const days=p.days;updateTask(t.id,{recurrence:p.id,activeDays:days});}}
+                        style={{flex:1,padding:"5px 2px",fontSize:9,fontWeight:700,borderRadius:7,cursor:"pointer",
+                          border:sel?"2px solid #0ea5e9":"1px solid var(--border)",background:sel?"#0ea5e920":"var(--barBg)",color:sel?"#0ea5e9":"var(--textTer)"}}>{p.label}</button>
                     );})}
                   </div>
+                  {(t.recurrence==="custom"||(!t.recurrence&&t.activeDays))&&<>
+                    <div style={{fontSize:9,color:"var(--textSec)",marginBottom:3}}>ימים פעילים:</div>
+                    <div style={{display:"flex",gap:3}}>
+                      {DS.map((d,i)=>{const active=t.activeDays?t.activeDays.includes(i):false;return(
+                        <button key={i} onClick={()=>{const cur=t.activeDays||[];const nd=active?cur.filter(x=>x!==i):[...cur,i];updateTask(t.id,{activeDays:nd.length===0||nd.length===7?null:nd.sort(),recurrence:nd.length===0||nd.length===7?"daily":"custom"});}}
+                          style={{width:28,height:28,fontSize:10,fontWeight:700,borderRadius:7,cursor:"pointer",border:active?"2px solid #6366f1":"1px solid var(--border)",background:active?"#6366f120":"var(--barBg)",color:active?"#6366f1":"var(--textTer)"}}>{d}</button>
+                      );})}
+                    </div>
+                  </>}
                 </div>
                 <button onClick={()=>{setEditTask(null);save();flash("💾");}} style={{padding:"6px 14px",background:"#10b981",border:"none",borderRadius:7,color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>💾</button>
               </div>
@@ -236,16 +275,34 @@ export default function ManageScreen({ S, app }) {
                 style={{flex:1,padding:"6px 4px",background:newTask.type===opt.v?"#6366f120":"var(--inputBg)",border:newTask.type===opt.v?"2px solid #6366f1":"1px solid var(--border)",borderRadius:8,color:newTask.type===opt.v?"#6366f1":"var(--textTer)",fontSize:10,fontWeight:600,cursor:"pointer"}}>{opt.l}</button>
             ))}
           </div>
-          <button onClick={()=>setNewTask({...newTask,requirePhoto:!newTask.requirePhoto})}
-            style={{...S.chip,...(newTask.requirePhoto?{borderColor:"#6366f1",background:"#6366f120",color:"#6366f1"}:{}),marginBottom:10}}>📷 חובה תמונה</button>
+          <div style={{display:"flex",gap:4,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
+            <button onClick={()=>setNewTask({...newTask,requirePhoto:!newTask.requirePhoto})}
+              style={{...S.chip,...(newTask.requirePhoto?{borderColor:"#6366f1",background:"#6366f120",color:"#6366f1"}:{})}}>📷 חובה תמונה</button>
+            <div style={{display:"flex",alignItems:"center",gap:3}}>
+              <span style={{fontSize:9,color:"var(--textSec)"}}>⏱️ זמן:</span>
+              <input type="number" value={newTask.timeLimit||''} onChange={e=>setNewTask({...newTask,timeLimit:parseInt(e.target.value)||null})}
+                placeholder="דק׳" style={{...S.inp,marginBottom:0,width:50,textAlign:"center",padding:"3px 4px",fontSize:10}} min="1"/>
+              <span style={{fontSize:8,color:"var(--textTer)"}}>דק׳</span>
+            </div>
+          </div>
           <div style={{marginBottom:10}}>
-            <div style={{fontSize:10,color:"var(--textSec)",marginBottom:4}}>📅 ימים פעילים (ריק = כל יום):</div>
-            <div style={{display:"flex",gap:3}}>
-              {DS.map((d,i)=>{const active=newTask.activeDays?newTask.activeDays.includes(i):false;return(
-                <button key={i} onClick={()=>{const cur=newTask.activeDays||[];const nd=active?cur.filter(x=>x!==i):[...cur,i];setNewTask({...newTask,activeDays:nd.length===0||nd.length===7?null:nd.sort()});}}
-                  style={{width:28,height:28,fontSize:10,fontWeight:700,borderRadius:7,cursor:"pointer",border:active?"2px solid #6366f1":"1px solid var(--border)",background:active?"#6366f120":"var(--barBg)",color:active?"#6366f1":"var(--textTer)"}}>{d}</button>
+            <div style={{fontSize:10,color:"var(--textSec)",marginBottom:4}}>🔄 תדירות:</div>
+            <div style={{display:"flex",gap:3,marginBottom:6}}>
+              {RECURRENCE_PRESETS.map(p=>{const sel=(newTask.recurrence||"daily")===p.id;return(
+                <button key={p.id} onClick={()=>{const days=p.days;setNewTask({...newTask,recurrence:p.id,activeDays:days});}}
+                  style={{flex:1,padding:"5px 2px",fontSize:9,fontWeight:700,borderRadius:7,cursor:"pointer",
+                    border:sel?"2px solid #0ea5e9":"1px solid var(--border)",background:sel?"#0ea5e920":"var(--barBg)",color:sel?"#0ea5e9":"var(--textTer)"}}>{p.label}</button>
               );})}
             </div>
+            {(newTask.recurrence==="custom")&&<>
+              <div style={{fontSize:9,color:"var(--textSec)",marginBottom:3}}>ימים פעילים:</div>
+              <div style={{display:"flex",gap:3}}>
+                {DS.map((d,i)=>{const active=newTask.activeDays?newTask.activeDays.includes(i):false;return(
+                  <button key={i} onClick={()=>{const cur=newTask.activeDays||[];const nd=active?cur.filter(x=>x!==i):[...cur,i];setNewTask({...newTask,activeDays:nd.length===0||nd.length===7?null:nd.sort(),recurrence:nd.length===0||nd.length===7?"daily":"custom"});}}
+                    style={{width:28,height:28,fontSize:10,fontWeight:700,borderRadius:7,cursor:"pointer",border:active?"2px solid #6366f1":"1px solid var(--border)",background:active?"#6366f120":"var(--barBg)",color:active?"#6366f1":"var(--textTer)"}}>{d}</button>
+                );})}
+              </div>
+            </>}
           </div>
           <button onClick={addNewTask} style={{width:"100%",padding:10,background:"linear-gradient(135deg,#4f46e5,#6366f1)",border:"none",borderRadius:10,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>✨ הוסף</button>
         </div>
@@ -299,6 +356,99 @@ export default function ManageScreen({ S, app }) {
         ))}
       </>}
 
+      {manageSub==="challenges"&&<>
+        <h3 style={S.st}>🏆 ניהול אתגרים</h3>
+        <p style={{fontSize:10,color:"var(--textSec)",margin:"0 0 10px"}}>כל שבוע נבחרים 3 אתגרים אקראיים. הוסיפו אתגרים מותאמים אישית!</p>
+
+        {/* Current week challenges */}
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:12,fontWeight:700,color:"var(--text)",marginBottom:6}}>📅 אתגרי השבוע הנוכחי</div>
+          {challenges.filter(c=>c.week===wk).map(ch=>{
+            const done=ch.type==="family"?Object.keys(ch.completedBy||{}).length>=CH.length
+              :CH.filter(c=>(ch.completedBy||{})[c]).length;
+            const total=ch.type==="family"?1:CH.length;
+            return(
+              <div key={ch.id} style={{background:"var(--card)",borderRadius:10,padding:10,marginBottom:4,border:"1px solid var(--border)",display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:18}}>{ch.emoji}</span>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:12,fontWeight:700,color:"var(--text)"}}>{ch.title}</div>
+                  <div style={{fontSize:9,color:"var(--textSec)"}}>{ch.desc} • +{ch.xpReward}XP • {ch.type==="family"?"משפחתי":"אישי"}</div>
+                </div>
+                <span style={{fontSize:11,fontWeight:700,color:done>=total?"#10b981":"#f59e0b"}}>{done>=total?"✅":`${done}/${total}`}</span>
+              </div>
+            );
+          })}
+          {challenges.filter(c=>c.week===wk).length===0&&<div style={{textAlign:"center",padding:12,color:"var(--textSec)",fontSize:10}}>אין אתגרים השבוע</div>}
+        </div>
+
+        {/* All available challenge types */}
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:12,fontWeight:700,color:"var(--text)",marginBottom:6}}>📋 מאגר אתגרים ({DEFAULT_CHALLENGES.length})</div>
+          {DEFAULT_CHALLENGES.map(ch=>(
+            <div key={ch.id} style={{background:"var(--card)",borderRadius:8,padding:"8px 10px",marginBottom:3,border:"1px solid var(--border)",display:"flex",alignItems:"center",gap:6}}>
+              <span style={{fontSize:14}}>{ch.emoji}</span>
+              <div style={{flex:1}}><span style={{fontSize:11,fontWeight:600,color:"var(--text)"}}>{ch.title}</span>
+                <span style={{fontSize:9,color:"var(--textSec)",marginRight:4}}> — {ch.desc}</span></div>
+              <span style={{fontSize:9,fontWeight:700,color:"#6366f1"}}>+{ch.xpReward}XP</span>
+              <span style={{fontSize:8,color:ch.type==="family"?"#8b5cf6":"#0ea5e9",fontWeight:700,background:ch.type==="family"?"#8b5cf610":"#0ea5e910",padding:"1px 5px",borderRadius:4}}>{ch.type==="family"?"👨‍👩‍👧‍👦":"👤"}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Custom challenges */}
+        {customChallenges&&customChallenges.length>0&&<div style={{marginBottom:14}}>
+          <div style={{fontSize:12,fontWeight:700,color:"var(--text)",marginBottom:6}}>⭐ אתגרים מותאמים</div>
+          {customChallenges.map(ch=>(
+            <div key={ch.id} style={{background:"var(--card)",borderRadius:8,padding:"8px 10px",marginBottom:3,border:"1px solid #f59e0b40",display:"flex",alignItems:"center",gap:6}}>
+              <span style={{fontSize:14}}>{ch.emoji}</span>
+              <div style={{flex:1}}><span style={{fontSize:11,fontWeight:600,color:"var(--text)"}}>{ch.title}</span>
+                <span style={{fontSize:9,color:"var(--textSec)",marginRight:4}}> — {ch.desc}</span></div>
+              <span style={{fontSize:9,fontWeight:700,color:"#6366f1"}}>+{ch.xpReward}XP</span>
+              <button onClick={()=>deleteCustomChallenge&&deleteCustomChallenge(ch.id)} style={S.dBtn}>🗑</button>
+            </div>
+          ))}
+        </div>}
+
+        {/* Add custom challenge */}
+        <div style={{background:"var(--card)",borderRadius:12,padding:14,border:"1px solid var(--border)"}}>
+          <div style={{fontSize:12,fontWeight:700,color:"var(--text)",marginBottom:8}}>➕ אתגר חדש</div>
+          <div style={{display:"flex",gap:6,marginBottom:6}}>
+            <input value={newChEmoji} onChange={e=>setNewChEmoji(e.target.value)} style={{...S.inp,marginBottom:0,width:44,textAlign:"center"}} placeholder="🏆"/>
+            <input value={newChTitle} onChange={e=>setNewChTitle(e.target.value)} style={{...S.inp,marginBottom:0,flex:1}} placeholder="שם האתגר"/>
+          </div>
+          <div style={{display:"flex",gap:6,marginBottom:6}}>
+            <select value={newChCondition} onChange={e=>setNewChCondition(e.target.value)} style={{...S.inp,marginBottom:0,flex:1}}>
+              <option value="week_tasks_done">מס׳ משימות בשבוע</option>
+              <option value="week_xp">XP בשבוע</option>
+              <option value="streak_days">ימי רצף</option>
+              <option value="bonus_count">יוזמות בונוס</option>
+              <option value="zero_missed">ימים ללא החמצה</option>
+              <option value="all_above_pct">% משפחתי</option>
+              <option value="all_same_day">יום מושלם (כולם)</option>
+            </select>
+            <select value={newChType} onChange={e=>setNewChType(e.target.value)} style={{...S.inp,marginBottom:0,width:90}}>
+              <option value="individual">👤 אישי</option>
+              <option value="family">👨‍👩‍👧‍👦 משפחתי</option>
+            </select>
+          </div>
+          <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:6}}>
+            <span style={{fontSize:10,color:"var(--textSec)"}}>ערך יעד:</span>
+            <input type="number" value={newChValue} onChange={e=>setNewChValue(parseInt(e.target.value)||1)} style={{...S.inp,marginBottom:0,width:60,textAlign:"center"}} min="1"/>
+            <span style={{fontSize:10,color:"var(--textSec)"}}>פרס XP:</span>
+            <input type="number" value={newChXpReward} onChange={e=>setNewChXpReward(parseInt(e.target.value)||10)} style={{...S.inp,marginBottom:0,width:60,textAlign:"center"}} min="1"/>
+          </div>
+          <button onClick={()=>{
+            if(!newChTitle.trim()){flash("⚠️ חסר שם");return;}
+            const condLabels={week_tasks_done:"משימות",week_xp:"XP",streak_days:"ימי רצף",bonus_count:"יוזמות",zero_missed:"ימים נקיים",all_above_pct:"אחוז",all_same_day:"יום מושלם"};
+            const desc=`${condLabels[newChCondition]||""}: ${newChValue}`;
+            addCustomChallenge&&addCustomChallenge({title:newChTitle,emoji:newChEmoji,condition:newChCondition,value:newChValue,xpReward:newChXpReward,type:newChType,desc});
+            setNewChTitle('');setNewChEmoji('🏆');setNewChValue(10);setNewChXpReward(30);
+          }} style={{width:"100%",padding:10,background:"linear-gradient(135deg,#f59e0b,#d97706)",border:"none",borderRadius:10,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+            🏆 הוסף אתגר
+          </button>
+        </div>
+      </>}
+
       {manageSub==="reminders"&&<>
         <h3 style={S.st}>⏰ תזכורות יומיות</h3>
         <p style={{fontSize:10,color:"var(--textSec)",margin:"0 0 10px"}}>תזכורות מופיעות במסך הבית של הילדים</p>
@@ -319,6 +469,44 @@ export default function ManageScreen({ S, app }) {
             style={{padding:"8px 16px",background:typeof Notification!=="undefined"&&Notification.permission==="granted"?"#10b981":"#6366f1",border:"none",borderRadius:8,color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>
             {typeof Notification!=="undefined"&&Notification.permission==="granted"?"✅ התראות פעילות":"🔔 אפשר התראות"}
           </button>
+        </div>
+
+        {/* Per-child custom reminders */}
+        <div style={{marginTop:14,marginBottom:14}}>
+          <div style={{fontSize:13,fontWeight:800,color:"var(--text)",marginBottom:6}}>👤 תזכורות אישיות לילדים</div>
+          <p style={{fontSize:10,color:"var(--textSec)",marginBottom:8}}>הגדרת שעות תזכורת ספציפיות לכל ילד/ה</p>
+
+          {CH.map(cid=>{const m=FAMILY[cid];const rems=childReminders?.[cid]||[];return(
+            <div key={cid} style={{background:"var(--card)",borderRadius:10,padding:10,marginBottom:6,border:"1px solid var(--border)"}}>
+              <div style={{fontSize:12,fontWeight:700,color:m.color,marginBottom:6}}>{m.emoji} {m.name}</div>
+              {rems.length===0&&<div style={{fontSize:9,color:"var(--textTer)",marginBottom:4}}>אין תזכורות</div>}
+              {rems.map(r=>(
+                <div key={r.id} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:"1px solid var(--border)"}}>
+                  <span style={{fontSize:11,fontWeight:700,color:"var(--text)"}}>{r.time}</span>
+                  <span style={{fontSize:10,color:"var(--textSec)",flex:1}}>{r.label||"תזכורת"}</span>
+                  <button onClick={()=>toggleChildReminder(cid,r.id)}
+                    style={{padding:"2px 8px",background:r.enabled?"#10b98120":"var(--barBg)",border:`1px solid ${r.enabled?"#10b98150":"var(--border)"}`,borderRadius:6,color:r.enabled?"#10b981":"var(--textTer)",fontSize:9,cursor:"pointer"}}>{r.enabled?"פעיל":"כבוי"}</button>
+                  <button onClick={()=>deleteChildReminder(cid,r.id)} style={{background:"none",border:"none",color:"#ef4444",fontSize:11,cursor:"pointer"}}>🗑</button>
+                </div>
+              ))}
+            </div>
+          );})}
+
+          {/* Add new child reminder */}
+          <div style={{background:"var(--barBg)",borderRadius:10,padding:10,marginTop:8}}>
+            <div style={{fontSize:11,fontWeight:700,color:"var(--text)",marginBottom:6}}>➕ תזכורת חדשה</div>
+            <div style={{display:"flex",gap:6,marginBottom:6}}>
+              <select value={newRemChild} onChange={e=>setNewRemChild(e.target.value)} style={{...S.inp,marginBottom:0,flex:1}}>
+                {CH.map(c=><option key={c} value={c}>{FAMILY[c]?.name}</option>)}
+              </select>
+              <input type="time" value={newRemTime} onChange={e=>setNewRemTime(e.target.value)} style={{...S.inp,marginBottom:0,width:80}}/>
+            </div>
+            <div style={{display:"flex",gap:6}}>
+              <input value={newRemLabel} onChange={e=>setNewRemLabel(e.target.value)} placeholder="תיאור (למשל: שיעורי בית)" style={{...S.inp,marginBottom:0,flex:1}}/>
+              <button onClick={()=>{addChildReminder(newRemChild,{time:newRemTime,label:newRemLabel||"תזכורת"});setNewRemLabel('');}}
+                style={{padding:"6px 10px",background:"#6366f1",border:"none",borderRadius:7,color:"#fff",fontSize:10,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>+ הוסף</button>
+            </div>
+          </div>
         </div>
 
         {/* Smart contextual reminders */}
@@ -368,6 +556,18 @@ export default function ManageScreen({ S, app }) {
                 style={{background:"none",border:"none",color:"#ef4444",fontSize:13,cursor:"pointer"}}>🗑</button>
             </div>
           ))}
+        </div>
+
+        {/* Sound & haptic settings */}
+        <div style={{marginTop:14,padding:12,background:"var(--card)",borderRadius:10,border:"1px solid var(--border)"}}>
+          <div style={{fontSize:12,fontWeight:700,color:"var(--text)",marginBottom:8}}>🔊 הגדרות צלילים</div>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:10,color:"var(--textSec)",flex:1}}>צלילי אפליקציה (סיום משימה, רמה, תג)</span>
+            <button onClick={()=>setSoundEnabled(!soundEnabled)}
+              style={{padding:"5px 12px",background:soundEnabled?"#10b98120":"var(--barBg)",border:`1px solid ${soundEnabled?"#10b98150":"var(--border)"}`,borderRadius:8,color:soundEnabled?"#10b981":"var(--textTer)",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+              {soundEnabled?"🔊 פעיל":"🔇 כבוי"}
+            </button>
+          </div>
         </div>
       </>}
 
@@ -537,6 +737,25 @@ export default function ManageScreen({ S, app }) {
         <div style={{background:"#eff6ff",borderRadius:10,padding:12,border:"1px solid #bfdbfe"}}>
           <div style={{fontSize:11,fontWeight:700,color:"#1e40af",marginBottom:4}}>💡 טיפ</div>
           <p style={{fontSize:10,color:"#1e40af",margin:0}}>מומלץ לגבות לפני שינויים גדולים. הקובץ כולל: משימות, השלמות, ציונים, XP, אירועים, רשימת קניות, הודעות ועוד.</p>
+        </div>
+      </>}
+
+      {manageSub==="lang"&&<>
+        <h3 style={S.st}>{t("manage.languageTitle")}</h3>
+        <div style={{background:"var(--card)",borderRadius:12,padding:16,border:"1px solid var(--border)",marginBottom:10}}>
+          <div style={{fontSize:12,fontWeight:700,color:"var(--text)",marginBottom:12}}>{t("manage.currentLang")}</div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>setLang&&setLang("he")}
+              style={{flex:1,padding:"14px 10px",background:lang==="he"?"#6366f120":"var(--barBg)",border:lang==="he"?"2px solid #6366f1":"1px solid var(--border)",borderRadius:12,cursor:"pointer",textAlign:"center"}}>
+              <div style={{fontSize:24,marginBottom:4}}>🇮🇱</div>
+              <div style={{fontSize:13,fontWeight:700,color:lang==="he"?"#6366f1":"var(--text)"}}>עברית</div>
+            </button>
+            <button onClick={()=>setLang&&setLang("en")}
+              style={{flex:1,padding:"14px 10px",background:lang==="en"?"#6366f120":"var(--barBg)",border:lang==="en"?"2px solid #6366f1":"1px solid var(--border)",borderRadius:12,cursor:"pointer",textAlign:"center"}}>
+              <div style={{fontSize:24,marginBottom:4}}>🇬🇧</div>
+              <div style={{fontSize:13,fontWeight:700,color:lang==="en"?"#6366f1":"var(--text)"}}>English</div>
+            </button>
+          </div>
         </div>
       </>}
 

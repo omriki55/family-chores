@@ -4,9 +4,10 @@ import storage from "./storage.firebase.js";
 import { migrateToFirestore } from "./migration.js";
 import S from "./styles.js";
 import { FAMILY, CH, FAMILY_NAME, DAYS, DS, DEFAULT_PINS, LEVELS, REMINDERS, PENALTIES, DEFAULT_BADGES, EXAM_BONUSES,
-  INIT_TASKS, DEFAULT_GOALS, GROCERY_CATEGORIES, DEFAULT_CHALLENGES } from "./constants.js";
+  INIT_TASKS, DEFAULT_GOALS, GROCERY_CATEGORIES, DEFAULT_CHALLENGES, RECURRENCE_PRESETS } from "./constants.js";
+import { t, setLanguage, getLang, isRTL } from "./i18n/index.js";
 import { compressImage, getWk, getToday, getHour, getTimeStr, dateKey, getWkForDate } from "./utils.js";
-import { isTaskForChild as _isTaskForChild, getLevel as _getLevel, getNextLevel as _getNextLevel, getXpProgress as _getXpProgress, getNewBadges } from "./logic.js";
+import { isTaskForChild as _isTaskForChild, isRecurringTask, getLevel as _getLevel, getNextLevel as _getNextLevel, getXpProgress as _getXpProgress, getNewBadges } from "./logic.js";
 import { signInWithGoogle, signOut as authSignOut, onAuthChange, generateFamilyCode } from "./auth.js";
 // Animations
 import Confetti from "./components/animations/Confetti.jsx";
@@ -26,6 +27,8 @@ import DashboardScreen from "./components/screens/DashboardScreen.jsx";
 import ApproveScreen from "./components/screens/ApproveScreen.jsx";
 import ManageScreen from "./components/screens/ManageScreen.jsx";
 import CounselorScreen from "./components/screens/CounselorScreen.jsx";
+import ProfileScreen from "./components/screens/ProfileScreen.jsx";
+import GalleryScreen from "./components/screens/GalleryScreen.jsx";
 import MealScreen from "./components/screens/MealScreen.jsx";
 import RewardsScreen from "./components/screens/RewardsScreen.jsx";
 // Modals
@@ -38,6 +41,7 @@ import CalEventModal from "./components/modals/CalEventModal.jsx";
 import ExamModal from "./components/modals/ExamModal.jsx";
 import PraiseModal from "./components/modals/PraiseModal.jsx";
 import WeeklySummaryModal from "./components/modals/WeeklySummaryModal.jsx";
+import TimerModal from "./components/modals/TimerModal.jsx";
 
 // Set Firestore collection path based on family code (before component renders)
 (()=>{try{const fc=JSON.parse(localStorage.getItem('family-chores_family-config')||'{}');
@@ -61,7 +65,7 @@ export default function App(){
   const[manageSub,setManageSub]=useState("tasks");
   const[editTask,setEditTask]=useState(null);
   const[weightEdit,setWeightEdit]=useState(null);
-  const[newTask,setNewTask]=useState({title:"",icon:"✨",weight:5,assignedTo:[],type:"personal",requirePhoto:false,activeDays:null});
+  const[newTask,setNewTask]=useState({title:"",icon:"✨",weight:5,assignedTo:[],type:"personal",requirePhoto:false,activeDays:null,recurrence:"daily"});
   const[notifChild,setNotifChild]=useState(null);
   const[bonusModal,setBonusModal]=useState(false);
   const[bonusTitle,setBonusTitle]=useState("");
@@ -121,6 +125,14 @@ export default function App(){
   const[spentXp,setSpentXp]=useState(()=>Object.fromEntries(CH.map(c=>[c,0])));
   const[purchaseHistory,setPurchaseHistory]=useState([]);
   const[taskTemplates,setTaskTemplates]=useState([]);
+  const[customChallenges,setCustomChallenges]=useState([]);
+  const[childReminders,setChildReminders]=useState({});
+  const[avatars,setAvatars]=useState({});
+  const[profileChild,setProfileChild]=useState(null);
+  const[activeTimer,setActiveTimer]=useState(null);
+  const[soundEnabled,setSoundEnabled]=useState(()=>localStorage.getItem('family-chores-sound')!=='0');
+  const[loading,setLoading]=useState(true);
+  const[lang,setLang]=useState(getLang);
   const[isOffline,setIsOffline]=useState(!navigator.onLine);
   const[needRefresh,setNeedRefresh]=useState(false);
   const updateSW=useRef(null);
@@ -157,7 +169,11 @@ export default function App(){
     const d_sx=await lk('spentXp');if(d_sx)setSpentXp(d_sx);
     const d_ph=await lk('purchaseHistory');if(d_ph)setPurchaseHistory(d_ph);
     const d_tt=await lk('taskTemplates');if(d_tt)setTaskTemplates(d_tt);
-  }catch(e){console.error('Load error:',e);}})();},[]);
+    const d_cc=await lk('customChallenges');if(d_cc)setCustomChallenges(d_cc);
+    const d_cr=await lk('childReminders');if(d_cr)setChildReminders(d_cr);
+    const d_av=await lk('avatars');if(d_av)setAvatars(d_av);
+    setLoading(false);
+  }catch(e){console.error('Load error:',e);setLoading(false);}})();},[]);
 
   // ── Dark mode ──
   useEffect(()=>{document.documentElement.setAttribute('data-theme',darkMode?'dark':'light');
@@ -191,8 +207,8 @@ export default function App(){
 
   useEffect(()=>{const h=(e)=>{e.preventDefault();deferredPrompt.current=e;setInstallReady(true);};
     window.addEventListener("beforeinstallprompt",h);return()=>window.removeEventListener("beforeinstallprompt",h);},[]);
-  useEffect(()=>{const off=()=>{setIsOffline(true);flash("📴 אין חיבור — עובד במצב לא מקוון");};
-    const on=()=>{setIsOffline(false);flash("🌐 חזרת לרשת!");};
+  useEffect(()=>{const off=()=>{setIsOffline(true);flash(t("app.offlineShort"));};
+    const on=()=>{setIsOffline(false);flash(t("app.backOnline"));};
     window.addEventListener("offline",off);window.addEventListener("online",on);
     return()=>{window.removeEventListener("offline",off);window.removeEventListener("online",on);};},[]);
   // ── PWA update detection ──
@@ -222,6 +238,14 @@ export default function App(){
         else if(h===14&&!sessionStorage.getItem(notifKey('a'))){body=afternoonMsgs[Math.floor(Math.random()*afternoonMsgs.length)];nKey='a';}
         else if(h===19&&!sessionStorage.getItem(notifKey('e'))){body=eveningMsgs[Math.floor(Math.random()*eveningMsgs.length)];nKey='e';}
         if(body){try{new Notification("משימות המשפחה 🏠",{body,icon:"/icon-192.png",dir:"rtl",lang:"he",tag:"chores-"+nKey});sessionStorage.setItem(notifKey(nKey),'1');}catch{}}
+        // Per-child custom reminders
+        const myRems=childReminders[user]||[];const nowStr=getTimeStr();
+        for(const rem of myRems){if(!rem.enabled)continue;
+          const rKey=`crem_${rem.id}_${getToday()}`;if(sessionStorage.getItem(rKey))continue;
+          const[rh,rm]=rem.time.split(":").map(Number);
+          if(h===rh&&Math.abs(new Date().getMinutes()-rm)<=2){
+            try{new Notification(`⏰ ${rem.label||"תזכורת"}`,{body:`${pending} משימות ממתינות`,icon:"/icon-192.png",dir:"rtl",lang:"he",tag:"crem-"+rem.id});
+              sessionStorage.setItem(rKey,'1');}catch{}}}
       } else {
         // Parent: notify about pending approvals
         const pendingApprove=Object.entries(completions).filter(([,v])=>v?.done&&!v?.approved).length;
@@ -229,7 +253,7 @@ export default function App(){
           try{new Notification("משימות המשפחה 🏠",{body:`📋 יש ${pendingApprove} משימות ממתינות לאישור`,icon:"/icon-192.png",dir:"rtl",lang:"he",tag:"chores-approve"});
             sessionStorage.setItem(notifKey('p'),'1');}catch{}}
       }
-    },60000);return()=>clearInterval(iv);},[user,tasks,completions,streaks]);
+    },60000);return()=>clearInterval(iv);},[user,tasks,completions,streaks,childReminders]);
 
   // ── Save (granular per-key to Firestore) ──
   const save=useCallback(async(overrides={})=>{try{
@@ -239,12 +263,21 @@ export default function App(){
 
   // ── Helpers ──
   const flash=(m)=>{setToast(m);setTimeout(()=>setToast(null),2200);};
+  const haptic=(ms=50)=>{if(navigator.vibrate)navigator.vibrate(ms);};
+  const playSound=useCallback((type)=>{
+    if(!soundEnabled)return;try{const ctx=new(window.AudioContext||window.webkitAudioContext)();const osc=ctx.createOscillator();const gain=ctx.createGain();
+    osc.connect(gain);gain.connect(ctx.destination);gain.gain.value=0.1;
+    if(type==='done'){osc.frequency.value=880;osc.type='sine';osc.start();osc.stop(ctx.currentTime+0.1);}
+    else if(type==='levelup'){osc.frequency.value=523;osc.type='sine';osc.start();setTimeout(()=>osc.frequency.value=659,100);setTimeout(()=>osc.frequency.value=784,200);osc.stop(ctx.currentTime+0.35);}
+    else if(type==='badge'){osc.frequency.value=1047;osc.type='triangle';osc.start();osc.stop(ctx.currentTime+0.2);}
+    }catch{}
+  },[soundEnabled]);
   const logAudit=(action,details={})=>{const entry={id:"aud_"+Date.now(),action,by:user,ts:Date.now(),...details};
     const nl=[entry,...auditLog].slice(0,500);setAuditLog(nl);return nl;};
   const cKey=(tid,cid,day)=>`${wk}_${tid}_${cid}_${day}`;
   const isP=user&&FAMILY[user]?.role==="parent";
 
-  const isTaskForChild=(task,cid,day)=>_isTaskForChild(task,cid,day);
+  const isTaskForChild=(task,cid,day,dateStr)=>_isTaskForChild(task,cid,day,dateStr);
   const getChildW=(cid)=>tasks.filter(t=>isTaskForChild(t,cid,selDay)&&!t.bonus).reduce((s,t)=>s+t.weight,0);
 
   // ── Calendar helpers ──
@@ -290,6 +323,7 @@ export default function App(){
     setXp(newXp);
     const newLv=LEVELS.slice().reverse().find(l=>(newXp[cid]||0)>=l.min);
     if(newLv&&newLv.min>oldLv.min){setLevelUpInfo(newLv);setTimeout(()=>setLevelUpInfo(null),3000);
+      playSound('levelup');haptic(200);
       const sm=addSystemMessage(`${FAMILY[cid]?.name} עלה/תה לרמה ${newLv.name}! ${newLv.emoji}`,"⬆️");setMessages(sm);}
     return newXp;
   };
@@ -303,6 +337,7 @@ export default function App(){
       if(ok)newlyEarned.push({id:badge.id,ts:Date.now()});}
     if(newlyEarned.length>0){const ub={...cEarnedBadges,[cid]:[...earned,...newlyEarned]};setEarnedBadges(ub);
       const first=DEFAULT_BADGES.find(b=>b.id===newlyEarned[0].id);setBadgeNotification({badge:first,childId:cid});
+      playSound('badge');haptic(150);
       setTimeout(()=>setBadgeNotification(null),3000);return ub;}
     return cEarnedBadges;
   };
@@ -322,15 +357,15 @@ export default function App(){
     data[cid]=w;});return data;};
 
   // ── Task actions ──
-  const markDone=(tid,cid,day,photo)=>{
+  const markDone=(tid,cid,day,photo,timerBonus)=>{
     const k=cKey(tid,cid,day);
-    const nc={...completions,[k]:{done:true,photo:photo||null,approved:false,approvedBy:null,ts:Date.now()}};
+    const nc={...completions,[k]:{done:true,photo:photo||null,approved:false,approvedBy:null,ts:Date.now(),timerBonus:!!timerBonus}};
     setCompletions(nc);
     const allToday=tasks.filter(t=>isTaskForChild(t,cid,day)&&!t.bonus);
     const allDone=allToday.every(t=>{const kk=t.id===tid?k:cKey(t.id,cid,day);return nc[kk]?.done;});
     if(allDone){setShowConfetti(true);setTimeout(()=>setShowConfetti(false),3000);
       const sm=addSystemMessage(`${FAMILY[cid]?.name} סיים/ה את כל המשימות! 🎉`,"🎉");setMessages(sm);save({completions:nc,messages:sm});flash("✅ בוצע!");return;}
-    const al=logAudit("task_done",{taskId:tid,childId:cid});save({completions:nc,auditLog:al});flash("✅ בוצע!");
+    const al=logAudit("task_done",{taskId:tid,childId:cid});save({completions:nc,auditLog:al});flash("✅ בוצע!");haptic();playSound('done');
   };
 
   const approve=(tid,cid,day)=>{
@@ -338,7 +373,8 @@ export default function App(){
     const nc={...completions,[k]:{...completions[k],approved:true,approvedBy:user}};
     setCompletions(nc);
     const task=tasks.find(t=>t.id===tid);
-    const xpGain=task?(task.bonus?task.weight*2:task.weight):5;
+    const baseXp=task?(task.bonus?task.weight*2:task.weight):5;
+    const xpGain=nc[k]?.timerBonus?Math.round(baseXp*1.5):baseXp;
     const newXp=addXp(cid,xpGain);
     const newTotalXp={...totalXpEarned,[cid]:(totalXpEarned[cid]||0)+xpGain};setTotalXpEarned(newTotalXp);
     const newAC={...approvedCount,[cid]:(approvedCount[cid]||0)+1};setApprovedCount(newAC);
@@ -413,6 +449,37 @@ export default function App(){
     return null;
   };
 
+  // ── Avatars ──
+  const setAvatar=(cid,avatar)=>{
+    const na={...avatars,[cid]:avatar};setAvatars(na);save({avatars:na});flash("✨ אווטאר עודכן!");
+  };
+
+  // ── Per-child reminders ──
+  const getNextReminder=(childId)=>{
+    const rems=childReminders[childId]||[];
+    const now=getTimeStr();const[nh,nm]=now.split(":").map(Number);const nowMin=nh*60+nm;
+    let next=null,minDiff=Infinity;
+    for(const r of rems){if(!r.enabled)continue;const[rh,rm]=r.time.split(":").map(Number);const rMin=rh*60+rm;
+      let diff=rMin-nowMin;if(diff<0)diff+=1440;
+      if(diff<minDiff){minDiff=diff;next=r;}}
+    return next;
+  };
+  const addChildReminder=(childId,reminder)=>{
+    const cur=childReminders[childId]||[];
+    const nc={...childReminders,[childId]:[...cur,{...reminder,id:"rem_"+Date.now(),enabled:true}]};
+    setChildReminders(nc);save({childReminders:nc});flash("⏰ תזכורת נוספה!");
+  };
+  const toggleChildReminder=(childId,remId)=>{
+    const cur=childReminders[childId]||[];
+    const nc={...childReminders,[childId]:cur.map(r=>r.id===remId?{...r,enabled:!r.enabled}:r)};
+    setChildReminders(nc);save({childReminders:nc});
+  };
+  const deleteChildReminder=(childId,remId)=>{
+    const cur=childReminders[childId]||[];
+    const nc={...childReminders,[childId]:cur.filter(r=>r.id!==remId)};
+    setChildReminders(nc);save({childReminders:nc});flash("🗑️");
+  };
+
   // ── Swap ──
   const requestSwap=(taskId,fromChild,toChild)=>{
     const ns=[...swaps,{id:"sw"+Date.now(),taskId,from:fromChild,to:toChild,day:selDay,status:"pending",ts:Date.now()}];
@@ -439,7 +506,7 @@ export default function App(){
   const addNewTask=()=>{if(!newTask.title||newTask.assignedTo.length===0){flash("⚠️ חסרים פרטים");return;}
     const nt=[...tasks,{...newTask,id:"t"+Date.now(),bonus:false,type:newTask.type||"personal"}];setTasks(nt);
     const al=logAudit("task_created",{title:newTask.title});save({tasks:nt,auditLog:al});
-    setNewTask({title:"",icon:"✨",weight:5,assignedTo:[],type:"personal",requirePhoto:false,activeDays:null});flash("✨ נוספה!");};
+    setNewTask({title:"",icon:"✨",weight:5,assignedTo:[],type:"personal",requirePhoto:false,activeDays:null,recurrence:"daily"});flash("✨ נוספה!");};
   const addSuggested=(s)=>{if(tasks.find(t=>t.title===s.title)){flash("⚠️ קיימת");return;}
     const nt=[...tasks,{id:"t"+Date.now(),title:s.title,icon:s.icon,weight:s.weight,assignedTo:[...CH],bonus:false,type:"personal"}];
     setTasks(nt);save({tasks:nt});flash(`✨ ${s.title} נוספה!`);};
@@ -449,6 +516,9 @@ export default function App(){
   const reorderTasks=(fromIdx,toIdx)=>{const nonBonus=tasks.filter(t=>!t.bonus);const bonus=tasks.filter(t=>t.bonus);
     const reordered=[...nonBonus];const[moved]=reordered.splice(fromIdx,1);reordered.splice(toIdx,0,moved);
     const nt=[...reordered,...bonus];setTasks(nt);const al=logAudit("task_updated",{detail:"reorder"});save({tasks:nt,auditLog:al});};
+  const skipTaskForDate=(taskId,dateStr)=>{
+    const nt=tasks.map(t=>t.id===taskId?{...t,skippedDates:[...(t.skippedDates||[]),dateStr]}:t);
+    setTasks(nt);save({tasks:nt});flash("⏭️ דילוג!");};
 
   const handlePhoto=async(e,tid,cid,day)=>{const f=e.target.files[0];if(!f)return;
     const compressed=await compressImage(f,600);markDone(tid,cid,day,compressed);};
@@ -533,10 +603,21 @@ export default function App(){
     const nt=taskTemplates.filter(t=>t.id!==templateId);setTaskTemplates(nt);save({taskTemplates:nt});flash('🗑️');
   };
 
+  // ── Custom Challenges ──
+  const addCustomChallenge=(ch)=>{
+    const nc=[...customChallenges,{...ch,id:"cch_"+Date.now()}];
+    setCustomChallenges(nc);save({customChallenges:nc});flash("🏆 אתגר נוסף!");
+  };
+  const deleteCustomChallenge=(chId)=>{
+    const nc=customChallenges.filter(c=>c.id!==chId);
+    setCustomChallenges(nc);save({customChallenges:nc});flash("🗑️");
+  };
+
   // ── Challenges ──
   const initWeeklyChallenges=()=>{
     const existing=challenges.find(c=>c.week===wk);if(existing)return challenges;
-    const picked=DEFAULT_CHALLENGES.sort(()=>Math.random()-0.5).slice(0,3);
+    const pool=[...DEFAULT_CHALLENGES,...customChallenges];
+    const picked=pool.sort(()=>Math.random()-0.5).slice(0,3);
     const instances=picked.map(ch=>({...ch,week:wk,completedBy:{},startTs:Date.now()}));
     const nc=[...challenges.filter(c=>c.week!==wk),...instances];setChallenges(nc);return nc;
   };
@@ -549,6 +630,9 @@ export default function App(){
         else if(ch.condition==="all_shared_done"){const shared=tasks.filter(t=>t.type==="shared"&&!t.bonus);
           met=shared.length>0&&shared.every(t=>{for(let d=0;d<7;d++){const assigned=CH.filter(c=>isTaskForChild(t,c,d));
             if(assigned.some(c=>!completions[cKey(t.id,c,d)]?.approved))return false;}return true;});}
+        else if(ch.condition==="all_same_day"){for(let d=0;d<7;d++){const allDone=CH.every(cid=>{
+          const dt=tasks.filter(t=>isTaskForChild(t,cid,d)&&!t.bonus);
+          return dt.length>0&&dt.every(t=>completions[cKey(t.id,cid,d)]?.approved);});if(allDone){met=true;break;}}}
         if(met){changed=true;const cb={};CH.forEach(c=>{cb[c]=true;});return{...ch,completedBy:cb};}
       } else {
         const newCB={...ch.completedBy};
@@ -556,6 +640,9 @@ export default function App(){
           if(ch.condition==="streak_days")met=(streaks[cid]||0)>=ch.value;
           else if(ch.condition==="zero_missed"){let clean=0;for(let d=0;d<7;d++){const dayTasks=tasks.filter(t=>isTaskForChild(t,cid,d)&&!t.bonus);
             if(dayTasks.length>0&&dayTasks.every(t=>completions[cKey(t.id,cid,d)]?.done))clean++;} met=clean>=ch.value;}
+          else if(ch.condition==="week_xp"){const wd=getWeeklyXpData();met=(wd[cid]||0)>=ch.value;}
+          else if(ch.condition==="week_tasks_done"){let cnt=0;for(let d=0;d<7;d++){tasks.forEach(t=>{if(isTaskForChild(t,cid,d)&&!t.bonus&&completions[cKey(t.id,cid,d)]?.approved)cnt++;});} met=cnt>=ch.value;}
+          else if(ch.condition==="bonus_count"){let cnt=0;for(let d=0;d<7;d++){tasks.forEach(t=>{if(t.bonus&&t.assignedTo.includes(cid)&&completions[cKey(t.id,cid,d)]?.approved)cnt++;});} met=cnt>=ch.value;}
           if(met){newCB[cid]=true;changed=true;}
         });
         return{...ch,completedBy:newCB};
@@ -660,6 +747,20 @@ export default function App(){
     // Templates
     taskTemplates,saveAsTemplate,applyTemplate,deleteTemplate,
     totalXpEarned,
+    // Recurring
+    skipTaskForDate,isRecurringTask,RECURRENCE_PRESETS,
+    // Custom Challenges
+    customChallenges,addCustomChallenge,deleteCustomChallenge,
+    // Child Reminders
+    childReminders,getNextReminder,addChildReminder,toggleChildReminder,deleteChildReminder,
+    // Profile & Avatars
+    avatars,setAvatar,profileChild,setProfileChild,approvedCount,
+    // Timer
+    activeTimer,setActiveTimer,
+    // UX
+    soundEnabled,setSoundEnabled:v=>{setSoundEnabled(v);localStorage.setItem('family-chores-sound',v?'1':'0');},
+    // i18n
+    t,lang,setLang:(l)=>{setLanguage(l);setLang(l);},isRTL,
     // ICS import
     importIcs:(icsText)=>{
       const events=[];const lines=icsText.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
@@ -680,6 +781,14 @@ export default function App(){
       setCalEvents(ne);save({calEvents:ne});flash(`📅 יובאו ${events.length} אירועים!`);
     },
   };
+
+  // ── Loading screen ──
+  if(loading&&familyConfigured) return(
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh",background:"var(--loginBg)",gap:16}}>
+      <div style={{fontSize:48,animation:"spin 2s linear infinite"}}>🏠</div>
+      <div style={{fontSize:14,fontWeight:700,color:"var(--text)",animation:"pulse 1.5s ease-in-out infinite"}}>{t("app.loading")}</div>
+    </div>
+  );
 
   // ── Onboarding (first run) ──
   if(!familyConfigured) return <OnboardingScreen onComplete={async(cfg)=>{
@@ -722,7 +831,7 @@ export default function App(){
   const me=FAMILY[user];const today=getToday();
 
   const wallUnread=messages.filter(m=>(m.to==="wall"||m.to===user)&&m.from!==user&&(Date.now()-m.ts)<86400000).length;
-  const tabNames={home:"בית",wall:"הודעות",cal:"לוח שנה",meal:"ארוחות",grocery:"קניות",tasks:"משימות",badges:"הישגים",rewards:"פרסים",dash:"דוחות",approve:"אישורים",manage:"הגדרות",counselor:"מיכאל"};
+  const tabNames={home:t("nav.home"),wall:t("nav.wall"),cal:t("nav.cal"),meal:t("nav.meal"),grocery:t("nav.grocery"),tasks:t("nav.tasks"),badges:t("nav.badges"),rewards:t("nav.rewards"),dash:t("nav.dash"),approve:t("nav.approve"),manage:t("nav.manage"),counselor:t("nav.counselor")};
   const tabList=[
     {id:"home",l:"🏠"},{id:"wall",l:"💬",badge:wallUnread},{id:"cal",l:"📅"},{id:"meal",l:"🍽️"},{id:"grocery",l:"🛒"},{id:"tasks",l:"📋"},
     ...(!isP?[{id:"badges",l:"🏅"},{id:"rewards",l:"🎁"}]:[]),
@@ -730,7 +839,7 @@ export default function App(){
   ];
 
   return(
-    <div className="app-shell" style={S.app} dir="rtl">
+    <div className="app-shell" style={S.app} dir={isRTL()?"rtl":"ltr"}>
       <style>{`
         *:focus-visible{outline:2px solid #6366f1;outline-offset:2px;border-radius:4px;}
       `}</style>
@@ -741,25 +850,25 @@ export default function App(){
 
       {/* Offline banner */}
       {isOffline&&<div style={{background:"linear-gradient(135deg,#f59e0b,#d97706)",color:"#fff",textAlign:"center",padding:"6px 12px",fontSize:11,fontWeight:700,position:"sticky",top:0,zIndex:1001}}>
-        📴 מצב לא מקוון — שינויים ישמרו כשתחזור לרשת
+        {t("app.offline")}
       </div>}
 
       {/* Update available banner */}
       {needRefresh&&<div style={{background:"linear-gradient(135deg,#6366f1,#8b5cf6)",color:"#fff",textAlign:"center",padding:"6px 12px",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:8,position:"sticky",top:isOffline?28:0,zIndex:1001}}>
-        🔄 גרסה חדשה זמינה
-        <button onClick={()=>updateSW.current&&updateSW.current()} style={{background:"#fff",color:"#6366f1",border:"none",borderRadius:6,padding:"3px 10px",fontSize:10,fontWeight:700,cursor:"pointer"}}>רענן</button>
+        {t("app.newVersion")}
+        <button onClick={()=>updateSW.current&&updateSW.current()} style={{background:"#fff",color:"#6366f1",border:"none",borderRadius:6,padding:"3px 10px",fontSize:10,fontWeight:700,cursor:"pointer"}}>{t("app.refresh")}</button>
       </div>}
 
       {/* HEADER */}
       <div className="app-header" style={S.header}>
         <div style={S.hTop}>
-          <button onClick={()=>setDarkMode(d=>!d)} style={{...S.backBtn,fontSize:14}} aria-label="מצב כהה/בהיר">{darkMode?'☀️':'🌙'}</button>
-          <button onClick={()=>{setScreen("login");setUser(null);}} style={S.backBtn} aria-label="נעילה — חזרה למסך כניסה">🔒</button>
+          <button onClick={()=>setDarkMode(d=>!d)} style={{...S.backBtn,fontSize:14}} aria-label={t("app.darkMode")}>{darkMode?'☀️':'🌙'}</button>
+          <button onClick={()=>{setScreen("login");setUser(null);}} style={S.backBtn} aria-label={t("app.lock")}>🔒</button>
           <div style={{flex:1}}>
             <div style={{fontSize:14,fontWeight:700,color:"var(--text)"}}>{me.name} {!isP&&getLevel(user)?.emoji}</div>
-            <div style={{fontSize:9,color:"#6366f1"}}>{isP?"מנהל/ת":me.weeklyPay>0?`${me.weeklyPay}₪/שבוע`:getLevel(user)?.name}</div>
+            <div style={{fontSize:9,color:"#6366f1"}}>{isP?t("app.manager"):me.weeklyPay>0?t("app.perWeek",{amount:me.weeklyPay}):getLevel(user)?.name}</div>
           </div>
-          {!isP&&<button onClick={()=>setBonusModal(true)} style={S.bonusFab}>⭐ יוזמה</button>}
+          {!isP&&<button onClick={()=>setBonusModal(true)} style={S.bonusFab}>{t("app.initiative")}</button>}
         </div>
       </div>
 
@@ -777,7 +886,7 @@ export default function App(){
       </nav>
 
       {/* MOBILE TABS */}
-      <div className="mobile-tabs" style={S.tabs} role="tablist" aria-label="ניווט ראשי">
+      <div className="mobile-tabs" style={S.tabs} role="tablist" aria-label={t("nav.main")}>
         {tabList.map(t=><button key={t.id} onClick={()=>setScreen(t.id)} role="tab" aria-selected={screen===t.id} aria-label={tabNames[t.id]||t.id}
           style={{...S.tab,...(screen===t.id?S.tabA:{}),position:"relative"}}><span aria-hidden="true">{t.l}</span>{t.badge>0&&<span style={{position:"absolute",top:2,right:2,width:8,height:8,borderRadius:4,background:"#ef4444"}} aria-label={`${t.badge} הודעות חדשות`}/>}</button>)}
       </div>
@@ -795,6 +904,8 @@ export default function App(){
         {screen==="manage"&&isP&&<ManageScreen S={S} app={app}/>}
         {screen==="counselor"&&isP&&<CounselorScreen S={S} app={app}/>}
         {screen==="meal"&&<MealScreen S={S} app={app}/>}
+        {screen==="profile"&&<ProfileScreen S={S} app={app}/>}
+        {screen==="gallery"&&<GalleryScreen S={S} app={app}/>}
       </div>
 
       <SwapModal S={S} app={app}/>
@@ -806,6 +917,7 @@ export default function App(){
       <ExamModal S={S} app={app}/>
       <PraiseModal S={S} app={app}/>
       <WeeklySummaryModal S={S} app={app}/>
+      <TimerModal S={S} app={app}/>
     </div>
   );
 }

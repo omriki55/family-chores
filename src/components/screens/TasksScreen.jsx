@@ -1,16 +1,22 @@
 import { useState, useCallback } from 'react';
 import { FAMILY, CH, DAYS, DS } from '../../constants.js';
 import { getToday } from '../../utils.js';
+import { t } from '../../i18n/index.js';
 
 export default function TasksScreen({ S, app }) {
   const {
     user, isP, tasks, completions, selDay, setSelDay,
-    cKey, isTaskForChild,
+    cKey, isTaskForChild, isRecurringTask, skipTaskForDate,
     setDoneConfirm, setSwapModal, setPhotoModal,
     approveWithPraise, reject, deleteTask,
+    setActiveTimer,
   } = app;
 
   const today = getToday();
+  const todayDate = new Date();
+  const diff = selDay - today;
+  const selDate = new Date(todayDate.getFullYear(), todayDate.getMonth(), todayDate.getDate() + diff);
+  const dateStr = `${selDate.getFullYear()}-${String(selDate.getMonth()+1).padStart(2,"0")}-${String(selDate.getDate()).padStart(2,"0")}`;
 
   // ── Swipe state ──
   const [swipeState, setSwipeState] = useState({});
@@ -55,13 +61,13 @@ export default function TasksScreen({ S, app }) {
       {/* Swipe hint */}
       {!swipeHintShown && !isP && (
         <div style={{textAlign:'center',padding:'6px 10px',background:'#ede9fe',borderRadius:8,marginBottom:8,fontSize:10,color:'#6366f1',fontWeight:600}}>
-          👆 החלק ימינה לסמן משימה כבוצעה
+          {t("tasks.swipeHint")}
         </div>
       )}
 
       {(isP?CH:[user]).filter(c=>FAMILY[c]).map(cid=>{
-        const m=FAMILY[cid];const dt=tasks.filter(t=>isTaskForChild(t,cid,selDay)&&!t.bonus);
-        const bt=tasks.filter(t=>isTaskForChild(t,cid,selDay)&&t.bonus);
+        const m=FAMILY[cid];const dt=tasks.filter(t=>isTaskForChild(t,cid,selDay,dateStr)&&!t.bonus);
+        const bt=tasks.filter(t=>isTaskForChild(t,cid,selDay,dateStr)&&t.bonus);
         const dw=dt.reduce((s,t)=>s+t.weight,0);if(dt.length===0&&bt.length===0)return null;
         const dc=dt.filter(t=>completions[cKey(t.id,cid,selDay)]?.done).length;
         return(
@@ -98,19 +104,23 @@ export default function TasksScreen({ S, app }) {
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
                           <span style={{fontSize:12,fontWeight:700,color:"var(--text)"}}>{task.title}</span>
-                          <span style={S.wt}>{task.weight}נק׳ {wpct}%</span>
-                          {task.type==="shared"&&<span style={{fontSize:7,fontWeight:700,color:"#8b5cf6",background:"#8b5cf615",padding:"1px 5px",borderRadius:5}}>📋 תורנות</span>}
+                          <span style={S.wt}>{task.weight}{t("tasks.points")} {wpct}%</span>
+                          {task.type==="shared"&&<span style={{fontSize:7,fontWeight:700,color:"#8b5cf6",background:"#8b5cf615",padding:"1px 5px",borderRadius:5}}>{t("tasks.shared")}</span>}
+                          {isRecurringTask(task)&&<span style={{fontSize:7,fontWeight:700,color:"#0ea5e9",background:"#0ea5e915",padding:"1px 5px",borderRadius:5}}>{t("tasks.recurring")}</span>}
                         </div>
                         <div style={{fontSize:9,marginTop:1}}>
                           {appd?<span style={{color:"#10b981"}}>✅ {FAMILY[comp.approvedBy]?.name}</span>
                             :done?<span style={{color:"#f59e0b"}}>⏳</span>
-                            :<span style={{color:"var(--textQuat)"}}>טרם בוצע</span>}
+                            :<span style={{color:"var(--textQuat)"}}>{t("tasks.notDone")}</span>}
                         </div>
                       </div>
                       <div style={{display:"flex",gap:3,alignItems:"center",flexShrink:0}}>
                         {!done&&!isP&&cid===user&&<>
                           <button onClick={()=>setDoneConfirm({taskId:task.id,childId:cid,day:selDay})} style={S.doneBtn}>✓</button>
-                          {/* Swap button */}
+                          {task.timeLimit&&<button onClick={()=>setActiveTimer({taskId:task.id,childId:cid,day:selDay,startTs:Date.now(),timeLimit:task.timeLimit,mode:"countdown"})}
+                            style={{width:28,height:28,background:"#0ea5e920",border:"1px solid #0ea5e940",borderRadius:7,color:"#0ea5e9",fontSize:10,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}} title={t("tasks.timer")}>⏱️</button>}
+                          {isRecurringTask(task)&&<button onClick={()=>skipTaskForDate(task.id,dateStr)}
+                            style={{width:28,height:28,background:"#f59e0b20",border:"1px solid #f59e0b40",borderRadius:7,color:"#f59e0b",fontSize:10,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}} title={t("tasks.skipToday")}>⏭️</button>}
                           <button onClick={()=>setSwapModal({taskId:task.id,from:cid})} style={{width:28,height:28,background:"#8b5cf620",border:"1px solid #8b5cf640",borderRadius:7,color:"#7c3aed",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>🔄</button>
                         </>}
                         {done&&comp?.photo&&<button onClick={()=>setPhotoModal({view:comp.photo})} style={S.vBtn}>🖼</button>}
@@ -129,7 +139,7 @@ export default function TasksScreen({ S, app }) {
                     <span style={{fontSize:16}}>{t.icon}</span>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:12,fontWeight:700,color:"var(--text)"}}>{t.title} <span style={{fontSize:9,color:"#7c3aed"}}>⭐</span></div>
-                      <div style={{fontSize:9}}>{c.approved?<span style={{color:"#10b981"}}>✅ בונוס</span>:<span style={{color:"#f59e0b"}}>⏳</span>}</div>
+                      <div style={{fontSize:9}}>{c.approved?<span style={{color:"#10b981"}}>{t("tasks.bonusApproved")}</span>:<span style={{color:"#f59e0b"}}>⏳</span>}</div>
                     </div>
                     {c.photo&&<button onClick={()=>setPhotoModal({view:c.photo})} style={S.vBtn}>🖼</button>}
                     {c.done&&!c.approved&&isP&&<><button onClick={()=>approveWithPraise(t.id,cid,selDay)} style={S.okBtn}>✓</button><button onClick={()=>{reject(t.id,cid,selDay);deleteTask(t.id);}} style={S.noBtn}>✕</button></>}

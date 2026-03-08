@@ -86,11 +86,21 @@ export const GROCERY_CATEGORIES=[
   {id:"snacks",name:"חטיפים ומתוקים",emoji:"🍫"},{id:"drinks",name:"שתייה",emoji:"🥤"},
   {id:"cleaning",name:"ניקיון",emoji:"🧹"},{id:"other",name:"אחר",emoji:"📦"},
 ];
+export const RECURRENCE_PRESETS=[
+  {id:"daily",label:"כל יום",days:null},
+  {id:"weekdays",label:"ימי חול",days:[0,1,2,3,4]},
+  {id:"weekends",label:"סופ\"ש",days:[5,6]},
+  {id:"custom",label:"מותאם אישית",days:null},
+];
 export const DEFAULT_CHALLENGES=[
   {id:"ch1",title:"שבוע סופר!",desc:"כל הילדים מעל 80% השבוע",emoji:"🏆",type:"family",condition:"all_above_pct",value:80,xpReward:50},
   {id:"ch2",title:"5 ימי רצף",desc:"השלם כל המשימות 5 ימים",emoji:"🔥",type:"individual",condition:"streak_days",value:5,xpReward:30},
   {id:"ch3",title:"אפס החמצות",desc:"0 משימות שהוחמצו 3 ימים",emoji:"💯",type:"individual",condition:"zero_missed",value:3,xpReward:25},
   {id:"ch4",title:"כולם ביחד",desc:"כל המשימות המשפחתיות בוצעו",emoji:"👨‍👩‍👧‍👦",type:"family",condition:"all_shared_done",value:1,xpReward:40},
+  {id:"ch5",title:"מאה נקודות!",desc:"צבור 100 XP השבוע",emoji:"💎",type:"individual",condition:"week_xp",value:100,xpReward:35},
+  {id:"ch6",title:"10 משימות!",desc:"השלם 10 משימות השבוע",emoji:"📋",type:"individual",condition:"week_tasks_done",value:10,xpReward:30},
+  {id:"ch7",title:"יום מושלם!",desc:"כל הילדים משלימים באותו יום",emoji:"🌟",type:"family",condition:"all_same_day",value:1,xpReward:45},
+  {id:"ch8",title:"בונוס סטאר",desc:"הגש יוזמה 3 פעמים",emoji:"⭐",type:"individual",condition:"bonus_count",value:3,xpReward:25},
 ];
 export const AUDIT_LABELS={
   task_done:"✅ ביצוע משימה",approved:"👍 אישור",rejected:"❌ דחייה",penalty_added:"⚠️ קנס",
