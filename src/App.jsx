@@ -22,6 +22,7 @@ import DashboardScreen from "./components/screens/DashboardScreen.jsx";
 import ApproveScreen from "./components/screens/ApproveScreen.jsx";
 import ManageScreen from "./components/screens/ManageScreen.jsx";
 import CounselorScreen from "./components/screens/CounselorScreen.jsx";
+import MealScreen from "./components/screens/MealScreen.jsx";
 // Modals
 import SwapModal from "./components/modals/SwapModal.jsx";
 import BonusModal from "./components/modals/BonusModal.jsx";
@@ -98,6 +99,7 @@ export default function App(){
   const[dragIdx,setDragIdx]=useState(null);
   const[dragOverIdx,setDragOverIdx]=useState(null);
   const[auditLog,setAuditLog]=useState([]);
+  const[locations,setLocations]=useState({});
   const[installReady,setInstallReady]=useState(false);
   const deferredPrompt=useRef(null);
   const fileRef=useRef(null);
@@ -117,6 +119,7 @@ export default function App(){
     if(d.auditLog)setAuditLog(d.auditLog);
     if(d.challenges)setChallenges(d.challenges);
     if(d.lastSummaryWeek)setLastSummaryWeek(d.lastSummaryWeek);
+    if(d.locations)setLocations(d.locations);
   }}catch{}})();},[]);
 
   useEffect(()=>{if(user&&challenges.filter(c=>c.week===wk).length===0){const nc=initWeeklyChallenges();if(nc)save({challenges:nc});}},[user]);
@@ -153,7 +156,8 @@ export default function App(){
     approvedCount:overrides.approvedCount||approvedCount,exams:overrides.exams||exams,
     calEvents:overrides.calEvents||calEvents,groceries:overrides.groceries||groceries,
     auditLog:overrides.auditLog||auditLog,challenges:overrides.challenges||challenges,lastSummaryWeek:overrides.lastSummaryWeek||lastSummaryWeek,
-  }));}catch{}},[tasks,completions,pins,xp,streaks,goals,swaps,activeReminders,messages,penalties,earnedBadges,totalXpEarned,approvedCount,exams,calEvents,groceries,auditLog,challenges,lastSummaryWeek]);
+    locations:overrides.locations||locations,
+  }));}catch{}},[tasks,completions,pins,xp,streaks,goals,swaps,activeReminders,messages,penalties,earnedBadges,totalXpEarned,approvedCount,exams,calEvents,groceries,auditLog,challenges,lastSummaryWeek,locations]);
 
   // ── Helpers ──
   const flash=(m)=>{setToast(m);setTimeout(()=>setToast(null),2200);};
@@ -521,6 +525,27 @@ export default function App(){
     showSummaryModal,weeklySummaryData,
     // Dashboard
     exams,getHeatmapData,getRecentAchievements,getWeeklyXpData,
+    // Location status
+    locations,setLocations,
+    // ICS import
+    importIcs:(icsText)=>{
+      const events=[];const lines=icsText.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
+      let cur=null;
+      for(const line of lines){
+        if(line==='BEGIN:VEVENT'){cur={};}
+        else if(line==='END:VEVENT'&&cur){
+          if(cur.title&&cur.date){events.push({id:'ics_'+Date.now()+Math.random(),title:cur.title,icon:'📅',type:'custom',recurring:null,members:[],date:cur.date,createdBy:user,color:'#6366f1',notes:cur.notes||''});}
+          cur=null;
+        } else if(cur){
+          if(line.startsWith('SUMMARY:'))cur.title=line.slice(8).trim();
+          else if(line.startsWith('DTSTART')){const v=line.split(':').pop().trim();if(v.length>=8){const y=v.slice(0,4),m=v.slice(4,6),d=v.slice(6,8);cur.date=`${y}-${m}-${d}`;}}
+          else if(line.startsWith('DESCRIPTION:'))cur.notes=line.slice(12).trim();
+        }
+      }
+      if(events.length===0){flash('⚠️ לא נמצאו אירועים בקובץ');return;}
+      const ne=[...calEvents,...events.filter(e=>!calEvents.some(c=>c.title===e.title&&c.date===e.date))];
+      setCalEvents(ne);save({calEvents:ne});flash(`📅 יובאו ${events.length} אירועים!`);
+    },
   };
 
   // ── PIN Screen ──
@@ -565,7 +590,7 @@ export default function App(){
       <div style={S.tabs}>
         {(()=>{const wallUnread=messages.filter(m=>(m.to==="wall"||m.to===user)&&m.from!==user&&(Date.now()-m.ts)<86400000).length;
         return[
-          {id:"home",l:"🏠"},{id:"wall",l:"💬",badge:wallUnread},{id:"cal",l:"📅"},{id:"grocery",l:"🛒"},{id:"tasks",l:"📋"},
+          {id:"home",l:"🏠"},{id:"wall",l:"💬",badge:wallUnread},{id:"cal",l:"📅"},{id:"meal",l:"🍽️"},{id:"grocery",l:"🛒"},{id:"tasks",l:"📋"},
           ...(!isP?[{id:"badges",l:"🏅"}]:[]),
           ...(isP?[{id:"dash",l:"📊"},{id:"approve",l:"✅"},{id:"manage",l:"⚙️"},{id:"counselor",l:"💡"}]:[]),
         ].map(t=><button key={t.id} onClick={()=>setScreen(t.id)}
@@ -583,6 +608,7 @@ export default function App(){
         {screen==="approve"&&isP&&<ApproveScreen S={S} app={app}/>}
         {screen==="manage"&&isP&&<ManageScreen S={S} app={app}/>}
         {screen==="counselor"&&isP&&<CounselorScreen S={S} app={app}/>}
+        {screen==="meal"&&<MealScreen S={S} app={app}/>}
       </div>
 
       <SwapModal S={S} app={app}/>

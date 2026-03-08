@@ -1,6 +1,22 @@
+import { useState } from 'react';
 import { FAMILY, CH, SUGGESTED, REMINDERS, AUDIT_LABELS } from '../../constants.js';
 
+const CONTEXT_REMINDER_PRESETS = [
+  {icon:"⚽",text:"אל תשכח ציוד לכדורגל!"},
+  {icon:"🏊",text:"תביא בגד ים ומגבת לשחיה!"},
+  {icon:"🎒",text:"בדוק שהתיק מוכן למחר"},
+  {icon:"📚",text:"זמן שיעורי בית - התחל עכשיו"},
+  {icon:"🎵",text:"אל תשכח כינור/חצוצרה לחוג"},
+  {icon:"🦷",text:"זמן צחצוח שיניים!"},
+  {icon:"💊",text:"אל תשכח לקחת תרופה"},
+  {icon:"🥗",text:"תשתה מים וקח חטיף לדרך"},
+];
+
 export default function ManageScreen({ S, app }) {
+  const [newContextReminder, setNewContextReminder] = useState({icon:"📌",text:"",day:"ראשון",time:"08:00"});
+  const [contextReminders, setContextReminders] = useState(()=>{
+    try{return JSON.parse(localStorage.getItem('family-context-reminders')||'[]');}catch{return[];}
+  });
   const {
     user, tasks, completions, goals, setGoals,
     activeReminders, setActiveReminders, auditLog,
@@ -11,6 +27,7 @@ export default function ManageScreen({ S, app }) {
     updateTask, deleteTask, changeWeight, reorderTasks, addNewTask, addSuggested,
     updatePin, save, flash,
   } = app;
+  const saveContextReminders = (r) => { setContextReminders(r); localStorage.setItem('family-context-reminders', JSON.stringify(r)); };
 
   return (
     <>
@@ -159,6 +176,55 @@ export default function ManageScreen({ S, app }) {
             style={{padding:"8px 16px",background:typeof Notification!=="undefined"&&Notification.permission==="granted"?"#10b981":"#6366f1",border:"none",borderRadius:8,color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>
             {typeof Notification!=="undefined"&&Notification.permission==="granted"?"✅ התראות פעילות":"🔔 אפשר התראות"}
           </button>
+        </div>
+
+        {/* Smart contextual reminders */}
+        <div style={{marginTop:14}}>
+          <div style={{fontSize:13,fontWeight:800,color:"var(--text)",marginBottom:6}}>💡 תזכורות הקשריות</div>
+          <p style={{fontSize:10,color:"var(--textSec)",marginBottom:8}}>תזכורות מיוחדות לפי יום — "אל תשכח ציוד לכדורגל"</p>
+          {/* Presets */}
+          <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:8}}>
+            {CONTEXT_REMINDER_PRESETS.map((p,i)=>(
+              <button key={i} onClick={()=>setNewContextReminder(r=>({...r,icon:p.icon,text:p.text}))}
+                style={{padding:"4px 8px",background:"#f0e6ff",border:"1px solid #c4b5fd",borderRadius:8,fontSize:9,color:"#7c3aed",cursor:"pointer",fontWeight:600}}>
+                {p.icon} {p.text.slice(0,14)}…
+              </button>
+            ))}
+          </div>
+          {/* New reminder form */}
+          <div style={{background:"var(--barBg)",borderRadius:10,padding:10,marginBottom:8}}>
+            <div style={{display:"flex",gap:6,marginBottom:6}}>
+              <input value={newContextReminder.icon} onChange={e=>setNewContextReminder(r=>({...r,icon:e.target.value}))}
+                style={{...S.inp,marginBottom:0,width:44,textAlign:"center"}} placeholder="😀"/>
+              <input value={newContextReminder.text} onChange={e=>setNewContextReminder(r=>({...r,text:e.target.value}))}
+                style={{...S.inp,marginBottom:0,flex:1}} placeholder="טקסט התזכורת"/>
+            </div>
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              <select value={newContextReminder.day} onChange={e=>setNewContextReminder(r=>({...r,day:e.target.value}))}
+                style={{...S.inp,marginBottom:0,flex:1}}>
+                {["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"].map(d=><option key={d}>{d}</option>)}
+              </select>
+              <input type="time" value={newContextReminder.time} onChange={e=>setNewContextReminder(r=>({...r,time:e.target.value}))}
+                style={{...S.inp,marginBottom:0,width:80}}/>
+              <button onClick={()=>{if(!newContextReminder.text.trim()){flash("⚠️ חסר טקסט");return;}
+                saveContextReminders([...contextReminders,{...newContextReminder,id:"cr_"+Date.now()}]);
+                setNewContextReminder({icon:"📌",text:"",day:"ראשון",time:"08:00"});flash("✅ נוסף!");}}
+                style={{padding:"6px 10px",background:"#6366f1",border:"none",borderRadius:7,color:"#fff",fontSize:10,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
+                + הוסף
+              </button>
+            </div>
+          </div>
+          {contextReminders.map(cr=>(
+            <div key={cr.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",background:"var(--card)",borderRadius:8,marginBottom:4,border:"1px solid var(--border)"}}>
+              <span>{cr.icon}</span>
+              <div style={{flex:1}}>
+                <div style={{fontSize:11,color:"var(--text)",fontWeight:600}}>{cr.text}</div>
+                <div style={{fontSize:9,color:"var(--textTer)"}}>יום {cr.day} ב-{cr.time}</div>
+              </div>
+              <button onClick={()=>saveContextReminders(contextReminders.filter(r=>r.id!==cr.id))}
+                style={{background:"none",border:"none",color:"#ef4444",fontSize:13,cursor:"pointer"}}>🗑</button>
+            </div>
+          ))}
         </div>
       </>}
 

@@ -1,4 +1,5 @@
 import { HDate, HebrewCalendar, flags } from '@hebcal/core';
+import { useRef } from 'react';
 import { FAMILY, CH, DAYS, DS } from '../../constants.js';
 import { dateKey } from '../../utils.js';
 
@@ -8,8 +9,9 @@ export default function CalendarScreen({ S, app }) {
     calYear, calMonth, calPrev, calNext,
     calSelDate, setCalSelDate,
     eventsForDate, getMonthHolidays, getTasksForDate,
-    deleteCalEvent, setCalEventModal,
+    deleteCalEvent, setCalEventModal, importIcs,
   } = app;
+  const icsRef = useRef(null);
 
   const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
   const firstDay=new Date(calYear,calMonth,1).getDay();
@@ -21,7 +23,19 @@ export default function CalendarScreen({ S, app }) {
 
   return (
     <>
-      <div style={{fontSize:15,fontWeight:800,textAlign:"center",marginBottom:8}}>📅 לוח שנה</div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+        <div style={{fontSize:15,fontWeight:800,color:"var(--text)"}}>📅 לוח שנה</div>
+        {isP&&<>
+          <input ref={icsRef} type="file" accept=".ics" style={{display:"none"}} onChange={e=>{
+            const f=e.target.files[0];if(!f)return;
+            const r=new FileReader();r.onload=ev=>importIcs(ev.target.result);r.readAsText(f);
+            e.target.value="";
+          }}/>
+          <button onClick={()=>icsRef.current?.click()} style={{padding:"4px 10px",background:"#6366f110",border:"1px solid #6366f130",borderRadius:8,color:"#6366f1",fontSize:10,fontWeight:600,cursor:"pointer"}}>
+            📥 ייבא .ics
+          </button>
+        </>}
+      </div>
       {/* Month nav */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,background:"#fff",borderRadius:12,padding:"8px 12px",border:"1px solid var(--border)"}}>
         <button onClick={calNext} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",color:"#6366f1",fontWeight:700}}>›</button>

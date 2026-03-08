@@ -8,7 +8,8 @@ export default function HomeScreen({S,app}){
     setScreen,setDoneConfirm,setBonusModal,sendNudge,setPenaltyModal,
     setExamModal,approveSwap,rejectSwap,earnedBadges,
     installReady,handleInstall,setInstallReady,
-    setShowSummaryModal,setWeeklySummaryData,getWeekCompletionCount,getLeadingChild,getFamilyStreak,getWeekXpTotal}=app;
+    setShowSummaryModal,setWeeklySummaryData,getWeekCompletionCount,getLeadingChild,getFamilyStreak,getWeekXpTotal,
+    locations,setLocations,save,flash}=app;
   const me=FAMILY[user];const today=getToday();
   const activeReminder=getActiveReminder();
 
@@ -49,6 +50,40 @@ export default function HomeScreen({S,app}){
         <div style={{flex:1,fontSize:10,color:"#92400e"}}>אפשר התראות לתזכורות</div>
         <button onClick={()=>Notification.requestPermission()} style={{padding:"4px 10px",background:"#f59e0b",border:"none",borderRadius:6,color:"#fff",fontSize:9,fontWeight:700,cursor:"pointer"}}>אפשר</button>
       </div>}
+
+      {/* מי איפה */}
+      {(()=>{
+        const LOC_OPTIONS=["🏠 בית","🏫 בית ספר","⚽ חוג","🧒 חבר/ה","🛒 קניות","💼 עבודה","🚗 בדרך","🌙 ישן/ה"];
+        const allMembers=[...Object.entries(FAMILY)];
+        return(
+          <div style={{background:"var(--card)",borderRadius:14,padding:12,marginBottom:10,border:"1px solid var(--border)"}}>
+            <div style={{fontSize:12,fontWeight:800,color:"var(--text)",marginBottom:8}}>📍 מי איפה עכשיו?</div>
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {allMembers.map(([id,m])=>{
+                const loc=locations[id]||"";
+                const canEdit=isP||(id===user);
+                return(
+                  <div key={id} style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:11,fontWeight:700,color:m.color,minWidth:50}}>{m.name}</span>
+                    {canEdit?(
+                      <div style={{display:"flex",gap:4,flexWrap:"wrap",flex:1}}>
+                        {LOC_OPTIONS.map(o=>(
+                          <button key={o} onClick={()=>{const nl={...locations,[id]:loc===o?"":o};setLocations(nl);save({locations:nl});}}
+                            style={{padding:"2px 7px",borderRadius:10,border:`1px solid ${loc===o?m.color:"var(--border)"}`,background:loc===o?m.color+"20":"transparent",color:loc===o?m.color:"var(--textTer)",fontSize:9,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
+                            {o}
+                          </button>
+                        ))}
+                      </div>
+                    ):(
+                      <span style={{fontSize:10,color:loc?"var(--textSec)":"var(--textQuat)"}}>{loc||"—"}</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Wall teaser */}
       {!isP&&(()=>{
