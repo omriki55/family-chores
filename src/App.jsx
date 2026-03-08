@@ -27,6 +27,7 @@ import ApproveScreen from "./components/screens/ApproveScreen.jsx";
 import ManageScreen from "./components/screens/ManageScreen.jsx";
 import CounselorScreen from "./components/screens/CounselorScreen.jsx";
 import MealScreen from "./components/screens/MealScreen.jsx";
+import RewardsScreen from "./components/screens/RewardsScreen.jsx";
 // Modals
 import SwapModal from "./components/modals/SwapModal.jsx";
 import BonusModal from "./components/modals/BonusModal.jsx";
@@ -45,6 +46,7 @@ import WeeklySummaryModal from "./components/modals/WeeklySummaryModal.jsx";
 export default function App(){
   const[familyConfigured,setFamilyConfigured]=useState(()=>!!localStorage.getItem('family-chores_family-config'));
   const[googleUser,setGoogleUser]=useState(null);
+  const[darkMode,setDarkMode]=useState(()=>localStorage.getItem('family-chores-dark')==='1');
   const[user,setUser]=useState(null);
   const[screen,setScreen]=useState("login");
   const[pinScreen,setPinScreen]=useState(null);
@@ -111,6 +113,14 @@ export default function App(){
   const[auditLog,setAuditLog]=useState([]);
   const[locations,setLocations]=useState({});
   const[installReady,setInstallReady]=useState(false);
+  const[rewards,setRewards]=useState([
+    {id:'rw1',title:'30 דקות מסכים',icon:'📱',cost:50,active:true},
+    {id:'rw2',title:'בחירת ארוחת ערב',icon:'🍕',cost:80,active:true},
+    {id:'rw3',title:'להישאר ער חצי שעה',icon:'🌙',cost:100,active:true},
+  ]);
+  const[spentXp,setSpentXp]=useState(()=>Object.fromEntries(CH.map(c=>[c,0])));
+  const[purchaseHistory,setPurchaseHistory]=useState([]);
+  const[taskTemplates,setTaskTemplates]=useState([]);
   const deferredPrompt=useRef(null);
   const fileRef=useRef(null);
   const bonusFileRef=useRef(null);
@@ -140,7 +150,15 @@ export default function App(){
     const d_ch=await lk('challenges');if(d_ch)setChallenges(d_ch);
     const d_lsw=await lk('lastSummaryWeek');if(d_lsw)setLastSummaryWeek(d_lsw);
     const d_loc=await lk('locations');if(d_loc)setLocations(d_loc);
+    const d_rw=await lk('rewards');if(d_rw)setRewards(d_rw);
+    const d_sx=await lk('spentXp');if(d_sx)setSpentXp(d_sx);
+    const d_ph=await lk('purchaseHistory');if(d_ph)setPurchaseHistory(d_ph);
+    const d_tt=await lk('taskTemplates');if(d_tt)setTaskTemplates(d_tt);
   }catch(e){console.error('Load error:',e);}})();},[]);
+
+  // ── Dark mode ──
+  useEffect(()=>{document.documentElement.setAttribute('data-theme',darkMode?'dark':'light');
+    localStorage.setItem('family-chores-dark',darkMode?'1':'0');},[darkMode]);
 
   // ── Realtime sync (listen for changes from other devices) ──
   useEffect(()=>{
@@ -457,6 +475,52 @@ export default function App(){
   const handleInstall=async()=>{if(!deferredPrompt.current)return;deferredPrompt.current.prompt();
     await deferredPrompt.current.userChoice;deferredPrompt.current=null;setInstallReady(false);};
 
+  // ── Rewards Shop ──
+  const getSpendableXp=(cid)=>(totalXpEarned[cid]||0)-(spentXp[cid]||0);
+  const purchaseReward=(childId,rewardId)=>{
+    const reward=rewards.find(r=>r.id===rewardId);
+    if(!reward||!reward.active){flash('⚠️ פרס לא זמין');return;}
+    if(getSpendableXp(childId)<reward.cost){flash('⚠️ אין מספיק נקודות');return;}
+    const ns={...spentXp,[childId]:(spentXp[childId]||0)+reward.cost};setSpentXp(ns);
+    const purchase={id:'pur_'+Date.now(),childId,rewardId,title:reward.title,icon:reward.icon,cost:reward.cost,ts:Date.now(),status:'pending'};
+    const np=[purchase,...purchaseHistory];setPurchaseHistory(np);
+    const al=logAudit('reward_purchased',{childId,rewardId,cost:reward.cost});
+    save({spentXp:ns,purchaseHistory:np,auditLog:al});flash(`🎁 ${reward.title} נרכש!`);
+  };
+  const addReward=(title,icon,cost)=>{
+    const nr=[...rewards,{id:'rw_'+Date.now(),title,icon,cost:parseInt(cost)||50,active:true}];
+    setRewards(nr);save({rewards:nr});flash('✨ פרס נוסף!');
+  };
+  const toggleRewardActive=(rewardId)=>{
+    const nr=rewards.map(r=>r.id===rewardId?{...r,active:!r.active}:r);
+    setRewards(nr);save({rewards:nr});
+  };
+  const deleteReward=(rewardId)=>{
+    const nr=rewards.filter(r=>r.id!==rewardId);setRewards(nr);save({rewards:nr});flash('🗑️');
+  };
+  const fulfillPurchase=(purchaseId)=>{
+    const np=purchaseHistory.map(p=>p.id===purchaseId?{...p,status:'fulfilled'}:p);
+    setPurchaseHistory(np);save({purchaseHistory:np});flash('✅ פרס סופק!');
+  };
+
+  // ── Task Templates ──
+  const saveAsTemplate=(name)=>{
+    const template={id:'tpl_'+Date.now(),name:name||'תבנית '+new Date().toLocaleDateString('he-IL'),
+      tasks:tasks.filter(t=>!t.bonus).map(t=>({title:t.title,icon:t.icon,weight:t.weight,assignedTo:t.assignedTo,type:t.type,requirePhoto:t.requirePhoto,activeDays:t.activeDays})),
+      ts:Date.now()};
+    const nt=[...taskTemplates,template];setTaskTemplates(nt);save({taskTemplates:nt});flash('💾 תבנית נשמרה!');
+  };
+  const applyTemplate=(templateId,mode='replace')=>{
+    const tpl=taskTemplates.find(t=>t.id===templateId);if(!tpl)return;
+    const newTasks=tpl.tasks.map((t,i)=>({...t,id:'t_tpl_'+Date.now()+'_'+i,bonus:false}));
+    const merged=mode==='replace'?[...newTasks,...tasks.filter(t=>t.bonus)]:[...tasks,...newTasks.filter(nt=>!tasks.some(t=>t.title===nt.title))];
+    setTasks(merged);const al=logAudit('template_applied',{templateId,mode});
+    save({tasks:merged,auditLog:al});flash(mode==='replace'?'📋 תבנית הוחלה!':'📋 משימות מוזגו!');
+  };
+  const deleteTemplate=(templateId)=>{
+    const nt=taskTemplates.filter(t=>t.id!==templateId);setTaskTemplates(nt);save({taskTemplates:nt});flash('🗑️');
+  };
+
   // ── Challenges ──
   const initWeeklyChallenges=()=>{
     const existing=challenges.find(c=>c.week===wk);if(existing)return challenges;
@@ -521,7 +585,8 @@ export default function App(){
 
   // ── PIN ──
   const verifyPin=(uid,pin)=>{const correct=pins[uid]||DEFAULT_PINS[uid];
-    if(pin===correct){setUser(uid);setPinScreen(null);setPinInput("");setPinError(false);setScreen("home");}
+    if(pin===correct){setUser(uid);setPinScreen(null);setPinInput("");setPinError(false);setScreen("home");
+      const al=logAudit('login',{uid});save({auditLog:al});}
     else{setPinError(true);setPinInput("");}};
   const updatePin=(uid,np)=>{if(np.length!==4||!/^\d{4}$/.test(np)){flash("⚠️ 4 ספרות");return;}
     const nPins={...pins,[uid]:np};setPins(nPins);const al=logAudit("pin_changed",{uid});save({pins:nPins,auditLog:al});setChangePinUser(null);setNewPinVal("");flash("🔒 עודכן!");};
@@ -573,6 +638,14 @@ export default function App(){
     exams,getHeatmapData,getRecentAchievements,getWeeklyXpData,
     // Location status
     locations,setLocations,
+    // Dark mode
+    darkMode,setDarkMode,
+    // Rewards
+    rewards,setRewards,spentXp,purchaseHistory,getSpendableXp,
+    purchaseReward,addReward,toggleRewardActive,deleteReward,fulfillPurchase,
+    // Templates
+    taskTemplates,saveAsTemplate,applyTemplate,deleteTemplate,
+    totalXpEarned,
     // ICS import
     importIcs:(icsText)=>{
       const events=[];const lines=icsText.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
@@ -654,6 +727,7 @@ export default function App(){
       {/* HEADER */}
       <div style={S.header}>
         <div style={S.hTop}>
+          <button onClick={()=>setDarkMode(d=>!d)} style={{...S.backBtn,fontSize:14}} aria-label="מצב כהה/בהיר">{darkMode?'☀️':'🌙'}</button>
           <button onClick={()=>{setScreen("login");setUser(null);}} style={S.backBtn} aria-label="נעילה — חזרה למסך כניסה">🔒</button>
           <div style={{flex:1}}>
             <div style={{fontSize:14,fontWeight:700,color:"var(--text)"}}>{me.name} {!isP&&getLevel(user)?.emoji}</div>
@@ -666,22 +740,23 @@ export default function App(){
       {/* TABS */}
       <div style={S.tabs} role="tablist" aria-label="ניווט ראשי">
         {(()=>{const wallUnread=messages.filter(m=>(m.to==="wall"||m.to===user)&&m.from!==user&&(Date.now()-m.ts)<86400000).length;
-        const tabNames={home:"בית",wall:"הודעות",cal:"לוח שנה",meal:"ארוחות",grocery:"קניות",tasks:"משימות",badges:"הישגים",dash:"דוחות",approve:"אישורים",manage:"הגדרות",counselor:"יועץ"};
+        const tabNames={home:"בית",wall:"הודעות",cal:"לוח שנה",meal:"ארוחות",grocery:"קניות",tasks:"משימות",badges:"הישגים",rewards:"פרסים",dash:"דוחות",approve:"אישורים",manage:"הגדרות",counselor:"יועץ"};
         return[
           {id:"home",l:"🏠"},{id:"wall",l:"💬",badge:wallUnread},{id:"cal",l:"📅"},{id:"meal",l:"🍽️"},{id:"grocery",l:"🛒"},{id:"tasks",l:"📋"},
-          ...(!isP?[{id:"badges",l:"🏅"}]:[]),
+          ...(!isP?[{id:"badges",l:"🏅"},{id:"rewards",l:"🎁"}]:[]),
           ...(isP?[{id:"dash",l:"📊"},{id:"approve",l:"✅"},{id:"manage",l:"⚙️"},{id:"counselor",l:"💡"}]:[]),
         ].map(t=><button key={t.id} onClick={()=>setScreen(t.id)} role="tab" aria-selected={screen===t.id} aria-label={tabNames[t.id]||t.id}
           style={{...S.tab,...(screen===t.id?S.tabA:{}),position:"relative"}}><span aria-hidden="true">{t.l}</span>{t.badge>0&&<span style={{position:"absolute",top:2,right:2,width:8,height:8,borderRadius:4,background:"#ef4444"}} aria-label={`${t.badge} הודעות חדשות`}/>}</button>);})()}
       </div>
 
-      <div style={S.content}>
+      <div key={screen} style={{...S.content,animation:'screenIn 0.25s ease-out'}}>
         {screen==="home"&&<HomeScreen S={S} app={app}/>}
         {screen==="wall"&&<WallScreen S={S} app={app}/>}
         {screen==="cal"&&<CalendarScreen S={S} app={app}/>}
         {screen==="grocery"&&<GroceryScreen S={S} app={app}/>}
         {screen==="tasks"&&<TasksScreen S={S} app={app}/>}
         {screen==="badges"&&!isP&&<BadgesScreen S={S} app={app}/>}
+        {screen==="rewards"&&!isP&&<RewardsScreen S={S} app={app}/>}
         {screen==="dash"&&isP&&<DashboardScreen S={S} app={app}/>}
         {screen==="approve"&&isP&&<ApproveScreen S={S} app={app}/>}
         {screen==="manage"&&isP&&<ManageScreen S={S} app={app}/>}

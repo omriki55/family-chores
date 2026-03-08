@@ -1,0 +1,13 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Family-scoped data (new structure)
+    match /families/{familyId}/data/{doc} {
+      allow read, write: if request.auth != null;
+    }
+    // Legacy collection (migration support)
+    match /family-chores/{doc} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

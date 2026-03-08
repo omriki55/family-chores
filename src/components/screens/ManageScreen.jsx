@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { FAMILY, CH, SUGGESTED, REMINDERS, AUDIT_LABELS, DS } from '../../constants.js';
 
 const CONTEXT_REMINDER_PRESETS = [
@@ -26,11 +26,69 @@ export default function ManageScreen({ S, app }) {
     dragIdx, setDragIdx, dragOverIdx, setDragOverIdx,
     updateTask, deleteTask, changeWeight, reorderTasks, addNewTask, addSuggested,
     updatePin, save, flash, storage,
+    // Rewards
+    rewards, addReward, toggleRewardActive, deleteReward,
+    purchaseHistory, fulfillPurchase,
+    // Templates
+    taskTemplates, saveAsTemplate, applyTemplate, deleteTemplate,
   } = app;
   const saveContextReminders = (r) => { setContextReminders(r); localStorage.setItem('family-context-reminders', JSON.stringify(r)); };
   const importFileRef = useRef(null);
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
+
+  // ── Touch Drag & Drop ──
+  const [touchDragIdx, setTouchDragIdx] = useState(null);
+  const [touchDragY, setTouchDragY] = useState(0);
+  const [touchOverIdx, setTouchOverIdx] = useState(null);
+  const itemRefs = useRef([]);
+  const touchStartY = useRef(0);
+  const touchStartIdx = useRef(null);
+
+  const onTouchStartDrag = useCallback((idx, e) => {
+    touchStartIdx.current = idx;
+    touchStartY.current = e.touches[0].clientY;
+    setTouchDragIdx(idx);
+    setTouchDragY(0);
+  }, []);
+
+  const onTouchMoveDrag = useCallback((e) => {
+    if (touchStartIdx.current === null) return;
+    e.preventDefault();
+    const y = e.touches[0].clientY;
+    const delta = y - touchStartY.current;
+    setTouchDragY(delta);
+    // Find which item we're over
+    const refs = itemRefs.current;
+    for (let i = 0; i < refs.length; i++) {
+      if (!refs[i]) continue;
+      const rect = refs[i].getBoundingClientRect();
+      if (y >= rect.top && y <= rect.bottom && i !== touchStartIdx.current) {
+        setTouchOverIdx(i);
+        return;
+      }
+    }
+  }, []);
+
+  const onTouchEndDrag = useCallback(() => {
+    const from = touchStartIdx.current;
+    const to = touchOverIdx;
+    if (from !== null && to !== null && from !== to) {
+      reorderTasks(from, to);
+    }
+    setTouchDragIdx(null);
+    setTouchDragY(0);
+    setTouchOverIdx(null);
+    touchStartIdx.current = null;
+  }, [touchOverIdx, reorderTasks]);
+
+  // ── Rewards management ──
+  const [newRewardTitle, setNewRewardTitle] = useState('');
+  const [newRewardIcon, setNewRewardIcon] = useState('🎁');
+  const [newRewardCost, setNewRewardCost] = useState(50);
+
+  // ── Templates ──
+  const [templateName, setTemplateName] = useState('');
 
   const handleExport = async () => {
     setExporting(true);
@@ -82,62 +140,76 @@ export default function ManageScreen({ S, app }) {
     e.target.value = '';
   };
 
+  const nonBonusTasks = tasks.filter(t => !t.bonus);
+
   return (
     <>
       <div style={{display:"flex",gap:3,marginBottom:12,overflowX:"auto",paddingBottom:2}} role="tablist" aria-label="הגדרות">
-        {[{id:"tasks",l:"📋",a:"משימות"},{id:"add",l:"➕",a:"הוספה"},{id:"suggest",l:"💡",a:"הצעות"},{id:"weights",l:"⚖️",a:"משקלות"},{id:"goals",l:"🎯",a:"יעדים"},{id:"reminders",l:"⏰",a:"תזכורות"},{id:"pins",l:"🔒",a:"קודים"},{id:"log",l:"📜",a:"יומן"},{id:"data",l:"💾",a:"גיבוי"}].map(t=>(
+        {[{id:"tasks",l:"📋",a:"משימות"},{id:"add",l:"➕",a:"הוספה"},{id:"suggest",l:"💡",a:"הצעות"},{id:"weights",l:"⚖️",a:"משקלות"},{id:"goals",l:"🎯",a:"יעדים"},{id:"reminders",l:"⏰",a:"תזכורות"},{id:"templates",l:"📄",a:"תבניות"},{id:"rewards",l:"🎁",a:"פרסים"},{id:"pins",l:"🔒",a:"קודים"},{id:"log",l:"📜",a:"יומן"},{id:"data",l:"💾",a:"גיבוי"}].map(t=>(
           <button key={t.id} onClick={()=>setManageSub(t.id)} role="tab" aria-selected={manageSub===t.id} aria-label={t.a}
             style={{...S.subT,...(manageSub===t.id?{background:"#6366f1",color:"#fff"}:{})}}><span aria-hidden="true">{t.l}</span></button>
         ))}
       </div>
 
-      {manageSub==="tasks"&&tasks.filter(t=>!t.bonus).map((t,idx)=>(
-        <div key={t.id} draggable onDragStart={()=>setDragIdx(idx)} onDragOver={e=>{e.preventDefault();setDragOverIdx(idx);}}
-          onDrop={()=>{if(dragIdx!==null&&dragIdx!==idx)reorderTasks(dragIdx,idx);setDragIdx(null);setDragOverIdx(null);}}
-          onDragEnd={()=>{setDragIdx(null);setDragOverIdx(null);}}
-          style={{background:"var(--card)",borderRadius:10,padding:10,marginBottom:5,border:"1px solid var(--border)",
-            opacity:dragIdx===idx?0.5:1,borderTop:dragOverIdx===idx&&dragIdx!==null&&dragIdx>idx?"2px solid #6366f1":undefined,
-            borderBottom:dragOverIdx===idx&&dragIdx!==null&&dragIdx<idx?"2px solid #6366f1":undefined,cursor:"grab"}}>
-          {editTask===t.id?(
-            <div>
-              <input style={S.inp} value={t.title} onChange={e=>updateTask(t.id,{title:e.target.value})}/>
-              <div style={{display:"flex",gap:4,alignItems:"center",marginBottom:6}}>
-                <span style={{fontSize:10,color:"var(--textSec)"}}>משקל:</span>
-                <button onClick={()=>changeWeight(t.id,-1)} style={S.wB}>−</button>
-                <span style={{fontSize:14,fontWeight:800,color:"var(--text)"}}>{t.weight}</span>
-                <button onClick={()=>changeWeight(t.id,1)} style={S.wB}>+</button>
-              </div>
-              <div style={{display:"flex",gap:3,marginBottom:6}}>
-                {CH.map(c=><button key={c} onClick={()=>{const a=t.assignedTo.includes(c)?t.assignedTo.filter(x=>x!==c):[...t.assignedTo,c];updateTask(t.id,{assignedTo:a});}}
-                  style={{...S.chip,...(t.assignedTo.includes(c)?{background:FAMILY[c].color+"20",borderColor:FAMILY[c].color,color:FAMILY[c].color}:{})}}>{FAMILY[c].name}</button>)}
-              </div>
-              <div style={{display:"flex",gap:4,marginBottom:6}}>
-                <button onClick={()=>updateTask(t.id,{requirePhoto:!t.requirePhoto})}
-                  style={{...S.chip,...(t.requirePhoto?{borderColor:"#6366f1",background:"#6366f120",color:"#6366f1"}:{})}}>📷 חובה תמונה</button>
-              </div>
-              <div style={{marginBottom:6}}>
-                <div style={{fontSize:9,color:"var(--textSec)",marginBottom:3}}>ימים פעילים (ריק = כל יום):</div>
-                <div style={{display:"flex",gap:3}}>
-                  {DS.map((d,i)=>{const active=t.activeDays?t.activeDays.includes(i):false;return(
-                    <button key={i} onClick={()=>{const cur=t.activeDays||[];const nd=active?cur.filter(x=>x!==i):[...cur,i];updateTask(t.id,{activeDays:nd.length===0||nd.length===7?null:nd.sort()});}}
-                      style={{width:28,height:28,fontSize:10,fontWeight:700,borderRadius:7,cursor:"pointer",border:active?"2px solid #6366f1":"1px solid var(--border)",background:active?"#6366f120":"var(--barBg)",color:active?"#6366f1":"var(--textTer)"}}>{d}</button>
-                  );})}
+      {manageSub==="tasks"&&(
+        <div onTouchMove={onTouchMoveDrag} onTouchEnd={onTouchEndDrag} style={{touchAction:touchDragIdx!==null?'none':'auto'}}>
+          {nonBonusTasks.map((t,idx)=>(
+          <div key={t.id} ref={el=>itemRefs.current[idx]=el}
+            draggable onDragStart={()=>setDragIdx(idx)} onDragOver={e=>{e.preventDefault();setDragOverIdx(idx);}}
+            onDrop={()=>{if(dragIdx!==null&&dragIdx!==idx)reorderTasks(dragIdx,idx);setDragIdx(null);setDragOverIdx(null);}}
+            onDragEnd={()=>{setDragIdx(null);setDragOverIdx(null);}}
+            style={{background:"var(--card)",borderRadius:10,padding:10,marginBottom:5,border:"1px solid var(--border)",
+              opacity:dragIdx===idx||touchDragIdx===idx?0.5:1,
+              borderTop:(dragOverIdx===idx&&dragIdx!==null&&dragIdx>idx)||(touchOverIdx===idx&&touchDragIdx!==null&&touchDragIdx>idx)?"2px solid #6366f1":undefined,
+              borderBottom:(dragOverIdx===idx&&dragIdx!==null&&dragIdx<idx)||(touchOverIdx===idx&&touchDragIdx!==null&&touchDragIdx<idx)?"2px solid #6366f1":undefined,
+              cursor:"grab",
+              transform:touchDragIdx===idx?`translateY(${touchDragY}px)`:'none',
+              zIndex:touchDragIdx===idx?100:1,
+              transition:touchDragIdx===idx?'none':'transform 0.15s',
+              position:'relative'}}>
+            {editTask===t.id?(
+              <div>
+                <input style={S.inp} value={t.title} onChange={e=>updateTask(t.id,{title:e.target.value})}/>
+                <div style={{display:"flex",gap:4,alignItems:"center",marginBottom:6}}>
+                  <span style={{fontSize:10,color:"var(--textSec)"}}>משקל:</span>
+                  <button onClick={()=>changeWeight(t.id,-1)} style={S.wB}>−</button>
+                  <span style={{fontSize:14,fontWeight:800,color:"var(--text)"}}>{t.weight}</span>
+                  <button onClick={()=>changeWeight(t.id,1)} style={S.wB}>+</button>
                 </div>
+                <div style={{display:"flex",gap:3,marginBottom:6}}>
+                  {CH.map(c=><button key={c} onClick={()=>{const a=t.assignedTo.includes(c)?t.assignedTo.filter(x=>x!==c):[...t.assignedTo,c];updateTask(t.id,{assignedTo:a});}}
+                    style={{...S.chip,...(t.assignedTo.includes(c)?{background:FAMILY[c].color+"20",borderColor:FAMILY[c].color,color:FAMILY[c].color}:{})}}>{FAMILY[c].name}</button>)}
+                </div>
+                <div style={{display:"flex",gap:4,marginBottom:6}}>
+                  <button onClick={()=>updateTask(t.id,{requirePhoto:!t.requirePhoto})}
+                    style={{...S.chip,...(t.requirePhoto?{borderColor:"#6366f1",background:"#6366f120",color:"#6366f1"}:{})}}>📷 חובה תמונה</button>
+                </div>
+                <div style={{marginBottom:6}}>
+                  <div style={{fontSize:9,color:"var(--textSec)",marginBottom:3}}>ימים פעילים (ריק = כל יום):</div>
+                  <div style={{display:"flex",gap:3}}>
+                    {DS.map((d,i)=>{const active=t.activeDays?t.activeDays.includes(i):false;return(
+                      <button key={i} onClick={()=>{const cur=t.activeDays||[];const nd=active?cur.filter(x=>x!==i):[...cur,i];updateTask(t.id,{activeDays:nd.length===0||nd.length===7?null:nd.sort()});}}
+                        style={{width:28,height:28,fontSize:10,fontWeight:700,borderRadius:7,cursor:"pointer",border:active?"2px solid #6366f1":"1px solid var(--border)",background:active?"#6366f120":"var(--barBg)",color:active?"#6366f1":"var(--textTer)"}}>{d}</button>
+                    );})}
+                  </div>
+                </div>
+                <button onClick={()=>{setEditTask(null);save();flash("💾");}} style={{padding:"6px 14px",background:"#10b981",border:"none",borderRadius:7,color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>💾</button>
               </div>
-              <button onClick={()=>{setEditTask(null);save();flash("💾");}} style={{padding:"6px 14px",background:"#10b981",border:"none",borderRadius:7,color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>💾</button>
-            </div>
-          ):(
-            <div style={{display:"flex",alignItems:"center",gap:6}}>
-              <span style={{fontSize:14,cursor:"grab",color:"var(--textSec)",userSelect:"none"}}>⠿</span>
-              <span style={{fontSize:16}}>{t.icon}</span>
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:"var(--text)"}}>{t.title}</div>
-                <div style={{fontSize:9,color:"var(--textTer)"}}>{t.weight}נק׳ • {t.assignedTo.map(c=>FAMILY[c]?.name).join(", ")} {t.type==="shared"?"• 📋 רוטציה":""}{t.activeDays?` • 📅 ${t.activeDays.map(d=>DS[d]).join(",")}`:""}</div></div>
-              <button onClick={()=>setEditTask(t.id)} style={S.eBtn} aria-label={`עריכת ${t.title}`}>✏️</button>
-              <button onClick={()=>deleteTask(t.id)} style={S.dBtn} aria-label={`מחיקת ${t.title}`}>🗑</button>
-            </div>
-          )}
+            ):(
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <span onTouchStart={(e)=>onTouchStartDrag(idx,e)}
+                  style={{fontSize:14,cursor:"grab",color:"var(--textSec)",userSelect:"none",padding:'6px 4px',touchAction:'none',minWidth:28,textAlign:'center'}}>⠿</span>
+                <span style={{fontSize:16}}>{t.icon}</span>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:"var(--text)"}}>{t.title}</div>
+                  <div style={{fontSize:9,color:"var(--textTer)"}}>{t.weight}נק׳ • {t.assignedTo.map(c=>FAMILY[c]?.name).join(", ")} {t.type==="shared"?"• 📋 רוטציה":""}{t.activeDays?` • 📅 ${t.activeDays.map(d=>DS[d]).join(",")}`:""}</div></div>
+                <button onClick={()=>setEditTask(t.id)} style={S.eBtn} aria-label={`עריכת ${t.title}`}>✏️</button>
+                <button onClick={()=>deleteTask(t.id)} style={S.dBtn} aria-label={`מחיקת ${t.title}`}>🗑</button>
+              </div>
+            )}
+          </div>
+        ))}
         </div>
-      ))}
+      )}
 
       {manageSub==="add"&&(
         <div style={{background:"var(--card)",borderRadius:12,padding:14,border:"1px solid var(--border)"}}>
@@ -299,6 +371,129 @@ export default function ManageScreen({ S, app }) {
         </div>
       </>}
 
+      {/* ── Templates Tab ── */}
+      {manageSub==="templates"&&<>
+        <h3 style={S.st}>📄 תבניות משימות</h3>
+        <p style={{fontSize:10,color:"var(--textSec)",margin:"0 0 12px"}}>שמרו תבנית של המשימות הנוכחיות והחילו אותה בעתיד</p>
+
+        {/* Save as template */}
+        <div style={{background:"var(--card)",borderRadius:12,padding:14,marginBottom:12,border:"1px solid var(--border)"}}>
+          <div style={{fontSize:12,fontWeight:700,color:"var(--text)",marginBottom:8}}>💾 שמירת תבנית חדשה</div>
+          <div style={{display:"flex",gap:6}}>
+            <input value={templateName} onChange={e=>setTemplateName(e.target.value)}
+              placeholder="שם התבנית (למשל: שבוע רגיל)" style={{...S.inp,marginBottom:0,flex:1}}/>
+            <button onClick={()=>{saveAsTemplate(templateName);setTemplateName('');}}
+              style={{padding:"8px 14px",background:"#6366f1",border:"none",borderRadius:8,color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
+              💾 שמור
+            </button>
+          </div>
+          <div style={{fontSize:9,color:"var(--textSec)",marginTop:6}}>
+            יישמרו {nonBonusTasks.length} משימות (ללא בונוסים)
+          </div>
+        </div>
+
+        {/* Template list */}
+        {taskTemplates.length===0?(
+          <div style={{textAlign:"center",padding:20,color:"var(--textSec)",fontSize:11}}>
+            <div style={{fontSize:28,marginBottom:6}}>📄</div>
+            אין תבניות שמורות
+          </div>
+        ):(
+          taskTemplates.map(tpl=>(
+            <div key={tpl.id} style={{background:"var(--card)",borderRadius:10,padding:12,marginBottom:6,border:"1px solid var(--border)"}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                <span style={{fontSize:16}}>📄</span>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:12,fontWeight:700,color:"var(--text)"}}>{tpl.name}</div>
+                  <div style={{fontSize:9,color:"var(--textSec)"}}>
+                    {tpl.tasks.length} משימות • {new Date(tpl.ts).toLocaleDateString('he-IL')}
+                  </div>
+                </div>
+                <button onClick={()=>deleteTemplate(tpl.id)}
+                  style={S.dBtn}>🗑</button>
+              </div>
+              <div style={{display:"flex",gap:4}}>
+                <button onClick={()=>{if(confirm('להחליף את כל המשימות הנוכחיות?'))applyTemplate(tpl.id,'replace');}}
+                  style={{flex:1,padding:"7px 0",background:"#6366f1",border:"none",borderRadius:8,color:"#fff",fontSize:10,fontWeight:700,cursor:"pointer"}}>
+                  🔄 החלף הכל
+                </button>
+                <button onClick={()=>applyTemplate(tpl.id,'merge')}
+                  style={{flex:1,padding:"7px 0",background:"#10b981",border:"none",borderRadius:8,color:"#fff",fontSize:10,fontWeight:700,cursor:"pointer"}}>
+                  ➕ מזג חדשות
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </>}
+
+      {/* ── Rewards Management Tab ── */}
+      {manageSub==="rewards"&&<>
+        <h3 style={S.st}>🎁 ניהול פרסים</h3>
+
+        {/* Pending purchases */}
+        {(()=>{const pending=purchaseHistory.filter(p=>p.status==='pending');
+          if(pending.length===0)return null;
+          return(
+            <div style={{background:"#fef3c7",borderRadius:12,padding:12,marginBottom:12,border:"1px solid #fde047"}}>
+              <div style={{fontSize:12,fontWeight:700,color:"#92400e",marginBottom:8}}>⏳ רכישות ממתינות ({pending.length})</div>
+              {pending.map(p=>(
+                <div key={p.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderBottom:"1px solid #fde04780"}}>
+                  <span style={{fontSize:16}}>{p.icon}</span>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:11,fontWeight:700,color:"#1e293b"}}>{p.title}</div>
+                    <div style={{fontSize:9,color:"#92400e"}}>{FAMILY[p.childId]?.name} • {p.cost} XP • {new Date(p.ts).toLocaleDateString('he-IL')}</div>
+                  </div>
+                  <button onClick={()=>fulfillPurchase(p.id)}
+                    style={{padding:"5px 10px",background:"#10b981",border:"none",borderRadius:7,color:"#fff",fontSize:10,fontWeight:700,cursor:"pointer"}}>
+                    ✅ סופק
+                  </button>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+
+        {/* Add reward */}
+        <div style={{background:"var(--card)",borderRadius:12,padding:14,marginBottom:12,border:"1px solid var(--border)"}}>
+          <div style={{fontSize:12,fontWeight:700,color:"var(--text)",marginBottom:8}}>➕ הוספת פרס חדש</div>
+          <div style={{display:"flex",gap:6,marginBottom:6}}>
+            <input value={newRewardIcon} onChange={e=>setNewRewardIcon(e.target.value)}
+              style={{...S.inp,marginBottom:0,width:44,textAlign:"center"}} placeholder="🎁"/>
+            <input value={newRewardTitle} onChange={e=>setNewRewardTitle(e.target.value)}
+              style={{...S.inp,marginBottom:0,flex:1}} placeholder="שם הפרס"/>
+          </div>
+          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            <span style={{fontSize:10,color:"var(--textSec)"}}>עלות:</span>
+            <input type="number" value={newRewardCost} onChange={e=>setNewRewardCost(parseInt(e.target.value)||0)}
+              style={{...S.inp,marginBottom:0,width:70,textAlign:"center"}} min="1"/>
+            <span style={{fontSize:10,color:"var(--textSec)"}}>XP</span>
+            <button onClick={()=>{if(!newRewardTitle.trim()){flash('⚠️ חסר שם');return;}
+              addReward(newRewardTitle,newRewardIcon,newRewardCost);setNewRewardTitle('');setNewRewardIcon('🎁');setNewRewardCost(50);}}
+              style={{padding:"8px 14px",background:"#6366f1",border:"none",borderRadius:8,color:"#fff",fontSize:10,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",marginRight:"auto",marginLeft:0}}>
+              ➕ הוסף
+            </button>
+          </div>
+        </div>
+
+        {/* Reward list */}
+        {rewards.map(r=>(
+          <div key={r.id} style={{background:"var(--card)",borderRadius:10,padding:10,marginBottom:4,border:`1px solid ${r.active?'#10b98140':'var(--border)'}`,
+            display:"flex",alignItems:"center",gap:8,opacity:r.active?1:0.6}}>
+            <span style={{fontSize:18}}>{r.icon}</span>
+            <div style={{flex:1}}>
+              <div style={{fontSize:12,fontWeight:700,color:"var(--text)"}}>{r.title}</div>
+              <div style={{fontSize:9,color:"var(--textSec)"}}>{r.cost} XP</div>
+            </div>
+            <button onClick={()=>toggleRewardActive(r.id)}
+              style={{padding:"4px 10px",background:r.active?"#10b98120":"var(--barBg)",border:`1px solid ${r.active?"#10b98150":"var(--border)"}`,borderRadius:7,color:r.active?"#10b981":"var(--textTer)",fontSize:10,cursor:"pointer"}}>
+              {r.active?"פעיל":"כבוי"}
+            </button>
+            <button onClick={()=>deleteReward(r.id)} style={S.dBtn}>🗑</button>
+          </div>
+        ))}
+      </>}
+
       {manageSub==="pins"&&Object.entries(FAMILY).map(([id,m])=>(
         <div key={id} style={{background:"var(--card)",borderRadius:10,padding:10,marginBottom:5,border:"1px solid var(--border)"}}>
           {changePinUser===id?(
@@ -351,8 +546,9 @@ export default function ManageScreen({ S, app }) {
         {auditLog.slice(0,100).map(e=>{const labels={task_done:"✅ ביצוע משימה",approved:"👍 אישור",rejected:"❌ דחייה",penalty_added:"⚠️ קנס",
           task_created:"✨ יצירת משימה",task_deleted:"🗑️ מחיקת משימה",task_updated:"✏️ עדכון משימה",pin_changed:"🔒 שינוי PIN",
           bonus_submitted:"⭐ יוזמה",swap_requested:"🔄 בקשת החלפה",swap_approved:"🔄 החלפה אושרה",swap_rejected:"❌ החלפה נדחתה",
-          exam_added:"📝 מבחן",cal_event_added:"📅 אירוע חדש",cal_event_deleted:"🗑️ מחיקת אירוע"};
-          return<div key={e.id} style={{background:"#fff",borderRadius:8,padding:"8px 10px",marginBottom:3,border:"1px solid var(--border)",display:"flex",alignItems:"center",gap:8}}>
+          exam_added:"📝 מבחן",cal_event_added:"📅 אירוע חדש",cal_event_deleted:"🗑️ מחיקת אירוע",
+          reward_purchased:"🎁 רכישת פרס",template_applied:"📄 החלת תבנית",login:"🔑 כניסה"};
+          return<div key={e.id} style={{background:"var(--card)",borderRadius:8,padding:"8px 10px",marginBottom:3,border:"1px solid var(--border)",display:"flex",alignItems:"center",gap:8}}>
             <div style={{flex:1}}>
               <div style={{fontSize:11,fontWeight:600,color:"var(--text)"}}>{labels[e.action]||e.action}</div>
               <div style={{fontSize:9,color:"var(--textSec)"}}>{FAMILY[e.by]?.name||"מערכת"} • {new Date(e.ts).toLocaleString("he-IL")}

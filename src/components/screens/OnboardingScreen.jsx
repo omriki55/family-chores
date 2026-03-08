@@ -170,10 +170,15 @@ export default function OnboardingScreen({onComplete,onJoin,signInWithGoogle}){
     finally{setJoinLoading(false);}
   };
 
+  // ── Dark mode toggle ──
+  const[_dark,_setDark]=useState(()=>localStorage.getItem('family-chores-dark')==='1');
+  const _toggleDark=()=>{const nd=!_dark;_setDark(nd);document.documentElement.setAttribute('data-theme',nd?'dark':'light');localStorage.setItem('family-chores-dark',nd?'1':'0');};
+
   // ── Step 0: Welcome ──
   if(step===0)return(
     <div style={wrap}>
-      <div style={{...card,textAlign:'center'}}>
+      <div style={{...card,textAlign:'center',position:'relative'}}>
+        <button onClick={_toggleDark} style={{position:'absolute',top:12,left:12,background:'none',border:'none',fontSize:16,cursor:'pointer'}} aria-label="מצב כהה/בהיר">{_dark?'☀️':'🌙'}</button>
         <div style={{fontSize:56,marginBottom:8}}>🏠</div>
         <h1 style={{fontSize:22,fontWeight:800,color:'#1e293b',margin:'0 0 6px'}}>ברוכים הבאים!</h1>
         <p style={{fontSize:13,color:'#64748b',margin:'0 0 6px',lineHeight:1.5}}>אפליקציה לניהול משימות ומעקב<br/>אחר הרגלים בריאים למשפחה שלכם</p>

@@ -7,6 +7,8 @@ const FAMILY_CODE=_dynConfig.familyId||null;
 
 export default function LoginScreen({S,getLevel,setPinScreen,setPinInput,setPinError,onReset}){
   const[showCode,setShowCode]=useState(false);
+  const[dark,setDark]=useState(()=>localStorage.getItem('family-chores-dark')==='1');
+  const toggleDark=()=>{const nd=!dark;setDark(nd);document.documentElement.setAttribute('data-theme',nd?'dark':'light');localStorage.setItem('family-chores-dark',nd?'1':'0');};
   const copyCode=()=>{if(!FAMILY_CODE)return;navigator.clipboard?.writeText(FAMILY_CODE).then(()=>{}).catch(()=>{});};
   return(
     <div style={S.lw}><div style={S.lc}>
@@ -44,6 +46,7 @@ export default function LoginScreen({S,getLevel,setPinScreen,setPinInput,setPinE
         </div>
       )}
       <div style={{marginTop:12,display:"flex",alignItems:"center",justifyContent:"center",gap:12}}>
+        <button onClick={toggleDark} style={{background:'none',border:'none',fontSize:14,cursor:'pointer',padding:4}} aria-label="מצב כהה/בהיר">{dark?'☀️':'🌙'}</button>
         <span style={{fontSize:9,color:"var(--textQuat)"}}>🔒 כניסה מאובטחת</span>
         {onReset&&<button onClick={onReset} style={{background:'none',border:'none',fontSize:9,color:'#94a3b8',cursor:'pointer',textDecoration:'underline'}}>⚙️ הגדר מחדש</button>}
       </div>
