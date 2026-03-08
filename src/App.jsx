@@ -87,6 +87,13 @@ const GROCERY_CATEGORIES=[
   {id:"cleaning",name:"ניקיון",emoji:"🧹"},{id:"other",name:"אחר",emoji:"📦"},
 ];
 
+const DEFAULT_CHALLENGES=[
+  {id:"ch1",title:"שבוע סופר!",desc:"כל הילדים מעל 80% השבוע",emoji:"🏆",type:"family",condition:"all_above_pct",value:80,xpReward:50},
+  {id:"ch2",title:"5 ימי רצף",desc:"השלם כל המשימות 5 ימים",emoji:"🔥",type:"individual",condition:"streak_days",value:5,xpReward:30},
+  {id:"ch3",title:"אפס החמצות",desc:"0 משימות שהוחמצו 3 ימים",emoji:"💯",type:"individual",condition:"zero_missed",value:3,xpReward:25},
+  {id:"ch4",title:"כולם ביחד",desc:"כל המשימות המשפחתיות בוצעו",emoji:"👨‍👩‍👧‍👦",type:"family",condition:"all_shared_done",value:1,xpReward:40},
+];
+
 const compressImage=(file,maxW=600)=>new Promise(resolve=>{
   const img=new Image();const url=URL.createObjectURL(file);
   img.onload=()=>{const c=document.createElement("canvas");
@@ -129,7 +136,7 @@ function LevelUp({show,level}){
       <div style={{textAlign:"center",animation:"levelPop 0.5s ease"}}>
         <div style={{fontSize:72,marginBottom:8,animation:"levelBounce 1s ease infinite"}}>{level.emoji}</div>
         <div style={{fontSize:24,fontWeight:800,color:"#f59e0b",marginBottom:4}}>עלית רמה!</div>
-        <div style={{fontSize:18,color:"#1e293b"}}>{level.name}</div>
+        <div style={{fontSize:18,color:"var(--text)"}}>{level.name}</div>
       </div>
       <style>{`@keyframes levelPop{0%{transform:scale(0)}50%{transform:scale(1.2)}100%{transform:scale(1)}}@keyframes levelBounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}`}</style>
     </div>
@@ -142,13 +149,15 @@ function BadgeEarned({show,badge}){
     <div style={{textAlign:"center",animation:"levelPop 0.5s ease"}}>
       <div style={{fontSize:72,marginBottom:8,animation:"levelBounce 1s ease infinite"}}>{badge.emoji}</div>
       <div style={{fontSize:20,fontWeight:800,color:"#f59e0b",marginBottom:4}}>תג חדש!</div>
-      <div style={{fontSize:16,color:"#e2e8f0"}}>{badge.title}</div>
-      <div style={{fontSize:12,color:"#94a3b8",marginTop:4}}>{badge.desc}</div>
+      <div style={{fontSize:16,color:"var(--border)"}}>{badge.title}</div>
+      <div style={{fontSize:12,color:"var(--textSec)",marginTop:4}}>{badge.desc}</div>
     </div>
   </div>);
 }
 
 export default function App(){
+  const[darkMode,setDarkMode]=useState(()=>localStorage.getItem('family-chores_dark')==='1');
+  const toggleDark=()=>{const n=!darkMode;setDarkMode(n);localStorage.setItem('family-chores_dark',n?'1':'0');};
   const[user,setUser]=useState(null);
   const[screen,setScreen]=useState("login");
   const[pinScreen,setPinScreen]=useState(null);
@@ -219,6 +228,17 @@ export default function App(){
   const[groceryInput,setGroceryInput]=useState("");
   const[groceryCat,setGroceryCat]=useState("other");
   const[groceryRecurring,setGroceryRecurring]=useState(false);
+  // Weekly Summary
+  const[showSummaryModal,setShowSummaryModal]=useState(false);
+  const[weeklySummaryData,setWeeklySummaryData]=useState(null);
+  const[lastSummaryWeek,setLastSummaryWeek]=useState(null);
+  // Challenges
+  const[challenges,setChallenges]=useState([]);
+  // Drag & Drop
+  const[dragIdx,setDragIdx]=useState(null);
+  const[dragOverIdx,setDragOverIdx]=useState(null);
+  // Audit Log
+  const[auditLog,setAuditLog]=useState([]);
   // PWA + Notifications
   const[installReady,setInstallReady]=useState(false);
   const deferredPrompt=useRef(null);
@@ -236,7 +256,21 @@ export default function App(){
     if(d.approvedCount)setApprovedCount(d.approvedCount);if(d.exams)setExams(d.exams);
     if(d.calEvents)setCalEvents(d.calEvents);
     if(d.groceries)setGroceries(d.groceries);
+    if(d.auditLog)setAuditLog(d.auditLog);
+    if(d.challenges)setChallenges(d.challenges);
+    if(d.lastSummaryWeek)setLastSummaryWeek(d.lastSummaryWeek);
   }}catch{}})();},[]);
+  // Init weekly challenges
+  useEffect(()=>{if(user&&challenges.filter(c=>c.week===wk).length===0){const nc=initWeeklyChallenges();if(nc)save({challenges:nc});}},[user]);
+  // Auto weekly summary
+  useEffect(()=>{if(!user||!isP)return;if(lastSummaryWeek&&lastSummaryWeek!==wk){
+    const wc=getWeekCompletionCount();const leading=getLeadingChild();
+    const data={completionPct:wc.total>0?Math.round((wc.done/wc.total)*100):0,leading,
+      perChild:CH.map(cid=>{const st=getWeekStats(cid);return{cid,...st};}),
+      familyStreak:getFamilyStreak(),totalXp:getWeekXpTotal()};
+    setWeeklySummaryData(data);setShowSummaryModal(true);setLastSummaryWeek(wk);save({lastSummaryWeek:wk});
+  } else if(!lastSummaryWeek){setLastSummaryWeek(wk);save({lastSummaryWeek:wk});}
+  },[user]);
 
   // PWA install prompt
   useEffect(()=>{const h=(e)=>{e.preventDefault();deferredPrompt.current=e;setInstallReady(true);};
@@ -262,9 +296,12 @@ export default function App(){
     earnedBadges:overrides.earnedBadges||earnedBadges,totalXpEarned:overrides.totalXpEarned||totalXpEarned,
     approvedCount:overrides.approvedCount||approvedCount,exams:overrides.exams||exams,
     calEvents:overrides.calEvents||calEvents,groceries:overrides.groceries||groceries,
-  }));}catch{}},[tasks,completions,pins,xp,streaks,goals,swaps,activeReminders,messages,penalties,earnedBadges,totalXpEarned,approvedCount,exams,calEvents,groceries]);
+    auditLog:overrides.auditLog||auditLog,challenges:overrides.challenges||challenges,lastSummaryWeek:overrides.lastSummaryWeek||lastSummaryWeek,
+  }));}catch{}},[tasks,completions,pins,xp,streaks,goals,swaps,activeReminders,messages,penalties,earnedBadges,totalXpEarned,approvedCount,exams,calEvents,groceries,auditLog,challenges,lastSummaryWeek]);
 
   const flash=(m)=>{setToast(m);setTimeout(()=>setToast(null),2200);};
+  const logAudit=(action,details={})=>{const entry={id:"aud_"+Date.now(),action,by:user,ts:Date.now(),...details};
+    const nl=[entry,...auditLog].slice(0,500);setAuditLog(nl);return nl;};
   const cKey=(tid,cid,day)=>`${wk}_${tid}_${cid}_${day}`;
   const isP=user&&FAMILY[user]?.role==="parent";
   // Rotation: for shared tasks, only one child per day
@@ -304,10 +341,11 @@ export default function App(){
   const addCalEvent=()=>{
     if(!calNewEvent.title.trim()){flash("⚠️ חסר שם");return;}
     const ne=[...calEvents,{...calNewEvent,id:"ev_"+Date.now(),date:calEventModal.date,createdBy:user,color:FAMILY[user]?.color||"#6366f1"}];
-    setCalEvents(ne);save({calEvents:ne});setCalEventModal(false);
+    const al=logAudit("cal_event_added",{title:calNewEvent.title});
+    setCalEvents(ne);save({calEvents:ne,auditLog:al});setCalEventModal(false);
     setCalNewEvent({title:"",icon:"📌",type:"custom",recurring:null,members:[]});flash("📅 נוסף!");
   };
-  const deleteCalEvent=(evId)=>{const ne=calEvents.filter(e=>e.id!==evId);setCalEvents(ne);save({calEvents:ne});flash("🗑️");};
+  const deleteCalEvent=(evId)=>{const ne=calEvents.filter(e=>e.id!==evId);const al=logAudit("cal_event_deleted",{evId});setCalEvents(ne);save({calEvents:ne,auditLog:al});flash("🗑️");};
 
   const getLevel=(cid)=>{const x=xp[cid]||0;let lv=LEVELS[0];for(const l of LEVELS)if(x>=l.min)lv=l;return lv;};
   const getNextLevel=(cid)=>{const x=xp[cid]||0;for(const l of LEVELS)if(x<l.min)return l;return null;};
@@ -343,7 +381,7 @@ export default function App(){
     if(!eb){flash("⚠️ ציון מתחת ל-90, אין בונוס");setExamModal(null);setExamScore("");return;}
     const ne=[...exams,{id:"ex_"+Date.now(),childId,score:s,bonus:eb.bonus,ts:Date.now(),by:user}];setExams(ne);
     const nm=[...messages,{id:"msg_"+Date.now(),from:user,to:childId,text:`📝 ${eb.label} - בונוס ${eb.bonus}₪!`,star:"📝",ts:Date.now()}];
-    setMessages(nm);save({exams:ne,messages:nm});flash(`📝 ${eb.label} - ${eb.bonus}₪ ל${FAMILY[childId]?.name}!`);
+    const al=logAudit("exam_added",{childId,score:s});setMessages(nm);save({exams:ne,messages:nm,auditLog:al});flash(`📝 ${eb.label} - ${eb.bonus}₪ ל${FAMILY[childId]?.name}!`);
     setExamModal(null);setExamScore("");
   };
 
@@ -360,7 +398,7 @@ export default function App(){
     const allDone=allToday.every(t=>{const kk=t.id===tid?k:cKey(t.id,cid,day);return nc[kk]?.done;});
     if(allDone){setShowConfetti(true);setTimeout(()=>setShowConfetti(false),3000);
       const sm=addSystemMessage(`${FAMILY[cid]?.name} סיים/ה את כל המשימות! 🎉`,"🎉");setMessages(sm);save({completions:nc,messages:sm});flash("✅ בוצע!");return;}
-    save({completions:nc});flash("✅ בוצע!");
+    const al=logAudit("task_done",{taskId:tid,childId:cid});save({completions:nc,auditLog:al});flash("✅ בוצע!");
   };
 
   const approve=(tid,cid,day)=>{
@@ -383,12 +421,14 @@ export default function App(){
         newTotalXp[cid]=(newTotalXp[cid]||0)+streakBonusXp;setTotalXpEarned(newTotalXp);}}
     // Check badges
     const newBadges=checkBadges(cid,newStreaks,newTotalXp,newAC,earnedBadges);
-    save({completions:nc,xp:newXp,streaks:newStreaks,totalXpEarned:newTotalXp,approvedCount:newAC,earnedBadges:newBadges});
+    const al=logAudit("approved",{taskId:tid,childId:cid,xp:xpGain});
+    save({completions:nc,xp:newXp,streaks:newStreaks,totalXpEarned:newTotalXp,approvedCount:newAC,earnedBadges:newBadges,auditLog:al});
     const bm=streakBonusXp>0?` + 🔥${streakBonusXp} בונוס רצף!`:"";
     flash(`👍 +${xpGain}XP!${bm}`);
+    setTimeout(()=>checkChallengeCompletion(),100);
   };
 
-  const reject=(tid,cid,day)=>{const k=cKey(tid,cid,day);const nc={...completions};delete nc[k];setCompletions(nc);save({completions:nc});flash("❌ נדחה");};
+  const reject=(tid,cid,day)=>{const k=cKey(tid,cid,day);const nc={...completions};delete nc[k];setCompletions(nc);const al=logAudit("rejected",{taskId:tid,childId:cid});save({completions:nc,auditLog:al});flash("❌ נדחה");};
 
   const getWeekStats=(cid)=>{
     const tw=getChildW(cid);let aW=0,dW=0,tW=0,dc=0,ac=0,tc=0,bonusA=0;
@@ -448,7 +488,7 @@ export default function App(){
   // Swap request
   const requestSwap=(taskId,fromChild,toChild)=>{
     const ns=[...swaps,{id:"sw"+Date.now(),taskId,from:fromChild,to:toChild,day:selDay,status:"pending",ts:Date.now()}];
-    setSwaps(ns);save({swaps:ns});flash("🔄 בקשת החלפה נשלחה!");
+    const al=logAudit("swap_requested",{taskId,from:fromChild,to:toChild});setSwaps(ns);save({swaps:ns,auditLog:al});flash("🔄 בקשת החלפה נשלחה!");
   };
   const approveSwap=(swapId)=>{
     const sw=swaps.find(s=>s.id===swapId);if(!sw)return;
@@ -460,29 +500,33 @@ export default function App(){
       return{...t,assignedTo:a};
     });
     const ns=swaps.map(s=>s.id===swapId?{...s,status:"approved"}:s);
-    setTasks(nt);setSwaps(ns);save({tasks:nt,swaps:ns});flash("🔄 החלפה אושרה!");
+    const al=logAudit("swap_approved",{swapId});setTasks(nt);setSwaps(ns);save({tasks:nt,swaps:ns,auditLog:al});flash("🔄 החלפה אושרה!");
   };
   const rejectSwap=(swapId)=>{
     const ns=swaps.map(s=>s.id===swapId?{...s,status:"rejected"}:s);
-    setSwaps(ns);save({swaps:ns});flash("❌ החלפה נדחתה");
+    const al=logAudit("swap_rejected",{swapId});setSwaps(ns);save({swaps:ns,auditLog:al});flash("❌ החלפה נדחתה");
   };
 
   const addNewTask=()=>{if(!newTask.title||newTask.assignedTo.length===0){flash("⚠️ חסרים פרטים");return;}
-    const nt=[...tasks,{...newTask,id:"t"+Date.now(),bonus:false,type:newTask.type||"personal"}];setTasks(nt);save({tasks:nt});
-    setNewTask({title:"",icon:"✨",weight:5,assignedTo:[],type:"personal"});flash("✨ נוספה!");};
+    const nt=[...tasks,{...newTask,id:"t"+Date.now(),bonus:false,type:newTask.type||"personal"}];setTasks(nt);
+    const al=logAudit("task_created",{title:newTask.title});save({tasks:nt,auditLog:al});
+    setNewTask({title:"",icon:"✨",weight:5,assignedTo:[],type:"personal",requirePhoto:false});flash("✨ נוספה!");};
   const addSuggested=(s)=>{if(tasks.find(t=>t.title===s.title)){flash("⚠️ קיימת");return;}
     const nt=[...tasks,{id:"t"+Date.now(),title:s.title,icon:s.icon,weight:s.weight,assignedTo:[...CH],bonus:false,type:"personal"}];
     setTasks(nt);save({tasks:nt});flash(`✨ ${s.title} נוספה!`);};
-  const deleteTask=(tid)=>{const nt=tasks.filter(t=>t.id!==tid);setTasks(nt);save({tasks:nt});flash("🗑️");};
-  const updateTask=(tid,u)=>{const nt=tasks.map(t=>t.id===tid?{...t,...u}:t);setTasks(nt);save({tasks:nt});};
+  const deleteTask=(tid)=>{const nt=tasks.filter(t=>t.id!==tid);setTasks(nt);const al=logAudit("task_deleted",{taskId:tid});save({tasks:nt,auditLog:al});flash("🗑️");};
+  const updateTask=(tid,u)=>{const nt=tasks.map(t=>t.id===tid?{...t,...u}:t);setTasks(nt);const al=logAudit("task_updated",{taskId:tid});save({tasks:nt,auditLog:al});};
   const changeWeight=(tid,d)=>{const t=tasks.find(x=>x.id===tid);if(t)updateTask(tid,{weight:Math.max(1,t.weight+d)});};
+  const reorderTasks=(fromIdx,toIdx)=>{const nonBonus=tasks.filter(t=>!t.bonus);const bonus=tasks.filter(t=>t.bonus);
+    const reordered=[...nonBonus];const[moved]=reordered.splice(fromIdx,1);reordered.splice(toIdx,0,moved);
+    const nt=[...reordered,...bonus];setTasks(nt);const al=logAudit("task_updated",{detail:"reorder"});save({tasks:nt,auditLog:al});};
 
   const handlePhoto=async(e,tid,cid,day)=>{const f=e.target.files[0];if(!f)return;
     const compressed=await compressImage(f,600);markDone(tid,cid,day,compressed);};
   const submitBonus=()=>{if(!bonusTitle.trim()){flash("⚠️ תאר/י");return;}
     const id="bonus_"+Date.now();const nt=[...tasks,{id,title:bonusTitle,icon:bonusIcon,weight:5,assignedTo:[user],bonus:true}];
     const k=cKey(id,user,selDay);const nc={...completions,[k]:{done:true,photo:bonusPhoto,approved:false,approvedBy:null,ts:Date.now()}};
-    setTasks(nt);setCompletions(nc);save({tasks:nt,completions:nc});setBonusModal(false);setBonusTitle("");setBonusIcon("⭐");setBonusPhoto(null);flash("⭐ נשלח!");};
+    const al=logAudit("bonus_submitted",{title:bonusTitle});setTasks(nt);setCompletions(nc);save({tasks:nt,completions:nc,auditLog:al});setBonusModal(false);setBonusTitle("");setBonusIcon("⭐");setBonusPhoto(null);flash("⭐ נשלח!");};
   const handleBonusPhoto=async(e)=>{const f=e.target.files[0];if(!f)return;
     const compressed=await compressImage(f,600);setBonusPhoto(compressed);};
 
@@ -500,7 +544,7 @@ export default function App(){
     setPenalties(np);
     const nm=[...messages,{id:"msg_"+Date.now(),from:user,to:childId,text:`⚠️ הופחתו ${p.xp} נקודות - ${p.title}`,star:"⚠️",ts:Date.now()}];
     setMessages(nm);
-    save({xp:newXp,penalties:np,messages:nm});flash(`⚠️ -${p.xp}XP`);setPenaltyModal(null);
+    const al=logAudit("penalty_added",{childId,penaltyId,xp:p.xp});save({xp:newXp,penalties:np,messages:nm,auditLog:al});flash(`⚠️ -${p.xp}XP`);setPenaltyModal(null);
   };
 
   // Grocery functions
@@ -513,6 +557,42 @@ export default function App(){
     const remaining=groceries.filter(g=>!g.bought);const ng=[...remaining,...recurring];setGroceries(ng);save({groceries:ng});flash("🧹 נוקה!");};
   const handleInstall=async()=>{if(!deferredPrompt.current)return;deferredPrompt.current.prompt();
     await deferredPrompt.current.userChoice;deferredPrompt.current=null;setInstallReady(false);};
+
+  // ── Challenges ──
+  const initWeeklyChallenges=()=>{
+    const existing=challenges.find(c=>c.week===wk);if(existing)return challenges;
+    const picked=DEFAULT_CHALLENGES.sort(()=>Math.random()-0.5).slice(0,3);
+    const instances=picked.map(ch=>({...ch,week:wk,completedBy:{},startTs:Date.now()}));
+    const nc=[...challenges.filter(c=>c.week!==wk),...instances];setChallenges(nc);return nc;
+  };
+  const checkChallengeCompletion=()=>{
+    const wkChallenges=challenges.filter(c=>c.week===wk);let changed=false;const updated=wkChallenges.map(ch=>{
+      if(ch.type==="family"){
+        if(Object.keys(ch.completedBy).length>0)return ch;
+        let met=false;
+        if(ch.condition==="all_above_pct"){met=CH.every(cid=>{const s=getWeekStats(cid);return s.pct>=ch.value;});}
+        else if(ch.condition==="all_shared_done"){const shared=tasks.filter(t=>t.type==="shared"&&!t.bonus);
+          met=shared.length>0&&shared.every(t=>{for(let d=0;d<7;d++){const assigned=CH.filter(c=>isTaskForChild(t,c,d));
+            if(assigned.some(c=>!completions[cKey(t.id,c,d)]?.approved))return false;}return true;});}
+        if(met){changed=true;const cb={};CH.forEach(c=>{cb[c]=true;});return{...ch,completedBy:cb};}
+      } else {
+        const newCB={...ch.completedBy};
+        CH.forEach(cid=>{if(newCB[cid])return;let met=false;
+          if(ch.condition==="streak_days")met=(streaks[cid]||0)>=ch.value;
+          else if(ch.condition==="zero_missed"){let clean=0;for(let d=0;d<7;d++){const dayTasks=tasks.filter(t=>isTaskForChild(t,cid,d)&&!t.bonus);
+            if(dayTasks.length>0&&dayTasks.every(t=>completions[cKey(t.id,cid,d)]?.done))clean++;} met=clean>=ch.value;}
+          if(met){newCB[cid]=true;changed=true;}
+        });
+        return{...ch,completedBy:newCB};
+      }
+      return ch;
+    });
+    if(changed){const nc=[...challenges.filter(c=>c.week!==wk),...updated];setChallenges(nc);
+      updated.forEach(ch=>{const def=DEFAULT_CHALLENGES.find(d=>d.id===ch.id);if(!def)return;
+        CH.forEach(cid=>{if(ch.completedBy[cid]&&!challenges.find(c=>c.id===ch.id&&c.week===wk)?.completedBy?.[cid]){
+          addXp(cid,def.xpReward);flash(`🏆 ${FAMILY[cid]?.name} השלים/ה אתגר: ${def.title}!`);}});});
+      save({challenges:nc});}
+  };
 
   // ── Family Wall functions ──
   const sendWallMessage=(text,to="wall")=>{
@@ -544,14 +624,14 @@ export default function App(){
     if(pin===correct){setUser(uid);setPinScreen(null);setPinInput("");setPinError(false);setScreen("home");}
     else{setPinError(true);setPinInput("");}};
   const updatePin=(uid,np)=>{if(np.length!==4||!/^\d{4}$/.test(np)){flash("⚠️ 4 ספרות");return;}
-    const nPins={...pins,[uid]:np};setPins(nPins);save({pins:nPins});setChangePinUser(null);setNewPinVal("");flash("🔒 עודכן!");};
+    const nPins={...pins,[uid]:np};setPins(nPins);const al=logAudit("pin_changed",{uid});save({pins:nPins,auditLog:al});setChangePinUser(null);setNewPinVal("");flash("🔒 עודכן!");};
 
   // ── PIN ──
   if(pinScreen){const m=FAMILY[pinScreen];return(
     <div style={S.lw}><div style={{...S.lc,maxWidth:320}}>
-      <button onClick={()=>{setPinScreen(null);setPinInput("");setPinError(false);}} style={{background:"none",border:"none",color:"#64748b",fontSize:13,cursor:"pointer",marginBottom:6}}>← חזרה</button>
+      <button onClick={()=>{setPinScreen(null);setPinInput("");setPinError(false);}} style={{background:"none",border:"none",color:"var(--textTer)",fontSize:13,cursor:"pointer",marginBottom:6}}>← חזרה</button>
       <div style={{fontSize:18,fontWeight:800,color:m.color,marginBottom:2}}>{m.name}</div>
-      <div style={{fontSize:12,color:"#94a3b8",marginBottom:16}}>סיסמה (4 ספרות)</div>
+      <div style={{fontSize:12,color:"var(--textSec)",marginBottom:16}}>סיסמה (4 ספרות)</div>
       <div style={{display:"flex",justifyContent:"center",gap:10,marginBottom:16}}>
         {[0,1,2,3].map(i=><div key={i} style={{width:16,height:16,borderRadius:8,border:`2px solid ${pinError?"#ef4444":pinInput.length>i?m.color:"#cbd5e1"}`,background:pinInput.length>i?m.color:"transparent",transition:"all 0.2s"}}/>)}
       </div>
@@ -563,7 +643,7 @@ export default function App(){
             else if(typeof n==="number"&&pinInput.length<4){const next=pinInput+n;setPinInput(next);setPinError(false);
               if(next.length===4)setTimeout(()=>verifyPin(pinScreen,next),200);}
           }} style={{width:"100%",height:48,borderRadius:12,border:"none",fontSize:n==="⌫"?18:22,fontWeight:700,cursor:n===null?"default":"pointer",
-            background:n===null?"transparent":"#f1f5f9",color:n===null?"transparent":"#1e293b",...(n===null?{visibility:"hidden"}:{})}}>{n}</button>
+            background:n===null?"transparent":"var(--barBg)",color:n===null?"transparent":"var(--text)",...(n===null?{visibility:"hidden"}:{})}}>{n}</button>
         ))}
       </div>
     </div></div>
@@ -573,19 +653,22 @@ export default function App(){
   if(screen==="login"){return(
     <div style={S.lw}><div style={S.lc}>
       <div style={{fontSize:44,marginBottom:4}}>🏠</div>
-      <h1 style={{fontSize:20,fontWeight:800,color:"#1e293b",margin:"0 0 2px"}}>משפחת גונן</h1>
-      <p style={{fontSize:11,color:"#94a3b8",margin:"0 0 18px"}}>משימות • גיימיפיקציה • יעדים משפחתיים</p>
+      <h1 style={{fontSize:20,fontWeight:800,color:"var(--text)",margin:"0 0 2px"}}>משפחת גונן</h1>
+      <p style={{fontSize:11,color:"var(--textSec)",margin:"0 0 18px"}}>משימות • גיימיפיקציה • יעדים משפחתיים</p>
       <div style={S.ug}>{Object.entries(FAMILY).map(([id,m])=>{
         const lvl=CH.includes(id)?getLevel(id):null;
         return(
           <button key={id} onClick={()=>{setPinScreen(id);setPinInput("");setPinError(false);}}
             style={{...S.ub,borderColor:m.color+"40",background:`linear-gradient(135deg,${m.color}10,${m.color}05)`,position:"relative"}}>
             <span style={{fontSize:13,fontWeight:700,color:m.color}}>{m.name}</span>
-            {lvl&&<span style={{fontSize:9,color:"#94a3b8"}}>{lvl.emoji} {lvl.name}</span>}
-            <span style={{fontSize:9,color:"#64748b"}}>{m.role==="parent"?"🔑 הורה":m.weeklyPay>0?`${m.weeklyPay}₪`:""}</span>
+            {lvl&&<span style={{fontSize:9,color:"var(--textSec)"}}>{lvl.emoji} {lvl.name}</span>}
+            <span style={{fontSize:9,color:"var(--textTer)"}}>{m.role==="parent"?"🔑 הורה":m.weeklyPay>0?`${m.weeklyPay}₪`:""}</span>
           </button>
         );})}</div>
-      <div style={{marginTop:12,fontSize:9,color:"#475569"}}>🔒 כניסה מאובטחת</div>
+      <div style={{marginTop:12,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+        <span style={{fontSize:9,color:"var(--textQuat)"}}>🔒 כניסה מאובטחת</span>
+        <button onClick={toggleDark} style={{background:"none",border:"1px solid var(--border)",borderRadius:6,padding:"2px 6px",fontSize:12,cursor:"pointer"}}>{darkMode?"☀️":"🌙"}</button>
+      </div>
     </div></div>
   );}
 
@@ -593,7 +676,20 @@ export default function App(){
   const activeReminder=getActiveReminder();
 
   return(
-    <div style={S.app} dir="rtl">
+    <div style={S.app} dir="rtl" data-dark={darkMode||undefined}>
+      <style>{darkMode?`
+        :root{--card:#1e293b;--text:#f1f5f9;--border:#334155;--inputBg:#0f172a;--barBg:#334155;--textSec:#94a3b8;--textTer:#94a3b8;--textQuat:#94a3b8;
+          --loginBg:linear-gradient(140deg,#0f172a,#1e1b4b 40%,#0c2234);--appBg:linear-gradient(180deg,#0f172a,#1e1b4b);
+          --shadow:rgba(0,0,0,0.3);--overlay:rgba(0,0,0,0.7);}
+      `:`
+        :root{--card:#ffffff;--text:#1e293b;--border:var(--border);--inputBg:#f8fafc;--barBg:#f1f5f9;--textSec:#94a3b8;--textTer:#64748b;--textQuat:#475569;
+          --loginBg:linear-gradient(140deg,#fef9f0,#f0e6ff 40%,#e0f2fe);--appBg:linear-gradient(180deg,#fef9f0,#f0e6ff);
+          --shadow:rgba(0,0,0,0.08);--overlay:rgba(0,0,0,0.4);}
+        @keyframes screenIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes listIn{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:translateX(0)}}
+        @keyframes cardPop{from{opacity:0;transform:scale(0.96)}to{opacity:1;transform:scale(1)}}
+        @keyframes toastSlide{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+      `}</style>
       <Confetti show={showConfetti}/>
       <LevelUp show={!!levelUpInfo} level={levelUpInfo}/>
       <BadgeEarned show={!!badgeNotification} badge={badgeNotification?.badge}/>
@@ -604,9 +700,10 @@ export default function App(){
         <div style={S.hTop}>
           <button onClick={()=>{setScreen("login");setUser(null);}} style={S.backBtn}>🔒</button>
           <div style={{flex:1}}>
-            <div style={{fontSize:14,fontWeight:700,color:"#1e293b"}}>{me.name} {!isP&&getLevel(user)?.emoji}</div>
+            <div style={{fontSize:14,fontWeight:700,color:"var(--text)"}}>{me.name} {!isP&&getLevel(user)?.emoji}</div>
             <div style={{fontSize:9,color:"#6366f1"}}>{isP?"מנהל/ת":me.weeklyPay>0?`${me.weeklyPay}₪/שבוע`:getLevel(user)?.name}</div>
           </div>
+          <button onClick={toggleDark} style={{...S.backBtn,marginRight:4}}>{darkMode?"☀️":"🌙"}</button>
           {!isP&&<button onClick={()=>setBonusModal(true)} style={S.bonusFab}>⭐ יוזמה</button>}
         </div>
       </div>
@@ -641,19 +738,19 @@ export default function App(){
 
           {/* Greeting */}
           <div style={{textAlign:"center",marginBottom:14}}>
-            <div style={{fontSize:16,fontWeight:800,color:"#1e293b"}}>
+            <div style={{fontSize:16,fontWeight:800,color:"var(--text)"}}>
               {getHour()<12?"☀️ בוקר טוב":getHour()<17?"🌤️ צהריים טובים":getHour()<21?"🌆 ערב טוב":"🌙 לילה טוב"}, {me.name}!
             </div>
-            <div style={{fontSize:11,color:"#94a3b8"}}>יום {DAYS[today]}</div>
+            <div style={{fontSize:11,color:"var(--textSec)"}}>יום {DAYS[today]}</div>
           </div>
 
           {/* PWA install prompt */}
           {installReady&&<div style={{background:"linear-gradient(135deg,#6366f120,#8b5cf620)",border:"1px solid #6366f160",borderRadius:12,padding:12,marginBottom:10,display:"flex",alignItems:"center",gap:8}}>
             <span style={{fontSize:22}}>📲</span>
             <div style={{flex:1}}><div style={{fontSize:12,fontWeight:700,color:"#6366f1"}}>להתקין את האפליקציה?</div>
-              <div style={{fontSize:9,color:"#64748b"}}>גישה מהירה מהטלפון</div></div>
+              <div style={{fontSize:9,color:"var(--textTer)"}}>גישה מהירה מהטלפון</div></div>
             <button onClick={handleInstall} style={{padding:"6px 12px",background:"#6366f1",border:"none",borderRadius:8,color:"#fff",fontSize:10,fontWeight:700,cursor:"pointer"}}>התקן</button>
-            <button onClick={()=>setInstallReady(false)} style={{background:"none",border:"none",color:"#94a3b8",cursor:"pointer",fontSize:14}}>✕</button>
+            <button onClick={()=>setInstallReady(false)} style={{background:"none",border:"none",color:"var(--textSec)",cursor:"pointer",fontSize:14}}>✕</button>
           </div>}
 
           {/* Notification permission (child) */}
@@ -669,12 +766,12 @@ export default function App(){
             const unread=myMsgs.filter(m=>m.from!==user&&(Date.now()-m.ts)<86400000).length;
             if(myMsgs.length===0)return null;
             return(
-              <button onClick={()=>setScreen("wall")} style={{width:"100%",background:unread>0?"linear-gradient(135deg,#fef3c7,#fffbeb)":"#ffffff",borderRadius:12,padding:10,marginBottom:10,border:unread>0?"1px solid #f59e0b40":"1px solid #e2e8f0",cursor:"pointer",textAlign:"right"}}>
+              <button onClick={()=>setScreen("wall")} style={{width:"100%",background:unread>0?"linear-gradient(135deg,#fef3c7,#fffbeb)":"var(--card)",borderRadius:12,padding:10,marginBottom:10,border:unread>0?"1px solid #f59e0b40":"1px solid var(--border)",cursor:"pointer",textAlign:"right"}}>
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
                   <span style={{fontSize:18}}>💬</span>
                   <div style={{flex:1}}>
-                    <div style={{fontSize:12,fontWeight:700,color:"#1e293b"}}>קיר משפחתי{unread>0&&<span style={{color:"#f59e0b"}}> ({unread} חדשות)</span>}</div>
-                    <div style={{fontSize:10,color:"#94a3b8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{myMsgs[0]?.text?.slice(0,40)}</div>
+                    <div style={{fontSize:12,fontWeight:700,color:"var(--text)"}}>קיר משפחתי{unread>0&&<span style={{color:"#f59e0b"}}> ({unread} חדשות)</span>}</div>
+                    <div style={{fontSize:10,color:"var(--textSec)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{myMsgs[0]?.text?.slice(0,40)}</div>
                   </div>
                   <span style={{color:"#6366f1",fontSize:10}}>←</span>
                 </div>
@@ -694,9 +791,9 @@ export default function App(){
                   <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
                     <div style={{fontSize:36}}>{lv.emoji}</div>
                     <div style={{flex:1}}>
-                      <div style={{fontSize:14,fontWeight:800,color:"#1e293b"}}>{lv.name}</div>
+                      <div style={{fontSize:14,fontWeight:800,color:"var(--text)"}}>{lv.name}</div>
                       <div style={{fontSize:10,color:"#6366f1"}}>{xp[user]||0} XP {nxt?`• עוד ${nxt.min-(xp[user]||0)} ל${nxt.name}`:""}</div>
-                      <div style={{height:6,background:"#f1f5f9",borderRadius:4,marginTop:4,overflow:"hidden"}}>
+                      <div style={{height:6,background:"var(--barBg)",borderRadius:4,marginTop:4,overflow:"hidden"}}>
                         <div style={{height:"100%",width:`${getXpProgress(user)}%`,background:"linear-gradient(90deg,#6366f1,#8b5cf6)",borderRadius:4,transition:"width 0.5s"}}/>
                       </div>
                     </div>
@@ -716,19 +813,19 @@ export default function App(){
                 )}
 
                 {/* Today progress */}
-                <div style={{background:"#ffffff",borderRadius:14,padding:14,marginBottom:10,border:"1px solid #e2e8f0"}}>
+                <div style={{background:"var(--card)",borderRadius:14,padding:14,marginBottom:10,border:"1px solid var(--border)"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                    <span style={{fontSize:13,fontWeight:700,color:"#1e293b"}}>📋 היום</span>
-                    <span style={{fontSize:12,fontWeight:700,color:todayDone===todayTasks.length?"#10b981":"#64748b"}}>{todayDone}/{todayTasks.length}</span>
+                    <span style={{fontSize:13,fontWeight:700,color:"var(--text)"}}>📋 היום</span>
+                    <span style={{fontSize:12,fontWeight:700,color:todayDone===todayTasks.length?"#10b981":"var(--textTer)"}}>{todayDone}/{todayTasks.length}</span>
                   </div>
-                  <div style={{height:8,background:"#f1f5f9",borderRadius:6,overflow:"hidden",marginBottom:8}}>
+                  <div style={{height:8,background:"var(--barBg)",borderRadius:6,overflow:"hidden",marginBottom:8}}>
                     <div style={{height:"100%",width:`${todayTasks.length>0?Math.round((todayDone/todayTasks.length)*100):0}%`,background:todayDone===todayTasks.length?"linear-gradient(90deg,#10b981,#059669)":"linear-gradient(90deg,#f59e0b,#f97316)",borderRadius:6,transition:"width 0.5s"}}/>
                   </div>
                   {/* Pending tasks quick list */}
                   {todayTasks.filter(t=>!completions[cKey(t.id,user,today)]?.done).slice(0,4).map(t=>(
-                    <div key={t.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:"1px solid #e2e8f0"}}>
+                    <div key={t.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:"1px solid var(--border)"}}>
                       <span style={{fontSize:14}}>{t.icon}</span>
-                      <span style={{fontSize:12,color:"#475569",flex:1}}>{t.title}</span>
+                      <span style={{fontSize:12,color:"var(--textQuat)",flex:1}}>{t.title}</span>
                       <button onClick={()=>setDoneConfirm({taskId:t.id,childId:user,day:today})} style={{...S.doneBtn,width:28,height:28,fontSize:13,borderRadius:7}}>✓</button>
                     </div>
                   ))}
@@ -745,7 +842,7 @@ export default function App(){
                   <div style={{background:"linear-gradient(135deg,#ecfdf5,#d1fae5)",borderRadius:14,padding:14,marginBottom:10,border:"1px solid #10b98140"}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                       <div><div style={{fontSize:12,color:"#059669"}}>💰 הרווחת השבוע</div>
-                        <div style={{fontSize:24,fontWeight:800,color:"#1e293b"}}>{st.earned}₪ <span style={{fontSize:12,color:"#059669"}}>/ {me.weeklyPay}₪</span></div>
+                        <div style={{fontSize:24,fontWeight:800,color:"var(--text)"}}>{st.earned}₪ <span style={{fontSize:12,color:"#059669"}}>/ {me.weeklyPay}₪</span></div>
                       </div>
                       <div style={{fontSize:28,fontWeight:800,color:"#10b981"}}>{st.pct}%</div>
                     </div>
@@ -754,9 +851,9 @@ export default function App(){
 
                 {/* Badges preview */}
                 {(()=>{const myBadges=earnedBadges[user]||[];if(myBadges.length===0)return null;return(
-                  <div style={{background:"#ffffff",borderRadius:14,padding:12,marginBottom:10,border:"1px solid #f59e0b40"}}>
+                  <div style={{background:"var(--card)",borderRadius:14,padding:12,marginBottom:10,border:"1px solid #f59e0b40"}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                      <span style={{fontSize:12,fontWeight:700,color:"#1e293b"}}>🏅 תגים</span>
+                      <span style={{fontSize:12,fontWeight:700,color:"var(--text)"}}>🏅 תגים</span>
                       <button onClick={()=>setScreen("badges")} style={{background:"none",border:"none",color:"#6366f1",fontSize:10,cursor:"pointer"}}>צפה בכולם →</button>
                     </div>
                     <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
@@ -774,7 +871,7 @@ export default function App(){
               {CH.map(cid=>{const m=FAMILY[cid];const lv=getLevel(cid);const st=getWeekStats(cid);
                 const todayPct=getTodayPctForChild(cid);
                 return(
-                  <div key={cid} style={{background:"#ffffff",borderRadius:12,padding:12,marginBottom:8,border:"1px solid #e2e8f0"}}>
+                  <div key={cid} style={{background:"var(--card)",borderRadius:12,padding:12,marginBottom:8,border:"1px solid var(--border)"}}>
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
                       <div style={{flex:1}}>
                         <div style={{display:"flex",alignItems:"center",gap:4}}>
@@ -782,11 +879,11 @@ export default function App(){
                           <span style={{fontSize:10}}>{lv.emoji}</span>
                           {(streaks[cid]||0)>0&&<span style={{fontSize:9,color:"#f59e0b"}}>🔥{streaks[cid]}</span>}
                         </div>
-                        <div style={{fontSize:10,color:"#64748b"}}>היום: {todayPct}% • שבוע: {st.pct}% {m.weeklyPay>0?`• ${st.earned}₪`:""}  </div>
+                        <div style={{fontSize:10,color:"var(--textTer)"}}>היום: {todayPct}% • שבוע: {st.pct}% {m.weeklyPay>0?`• ${st.earned}₪`:""}  </div>
                       </div>
                       <button onClick={()=>sendNudge(cid)} style={{width:30,height:30,background:"#6366f115",border:"1px solid #6366f130",borderRadius:8,color:"#6366f1",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",marginLeft:4}}>👋</button>
                       <button onClick={()=>setPenaltyModal({childId:cid})} style={{width:30,height:30,background:"#ef444415",border:"1px solid #ef444430",borderRadius:8,color:"#ef4444",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",marginLeft:4}}>⚠️</button>
-                      <div style={{width:36,height:36,borderRadius:18,border:`3px solid ${todayPct===100?"#10b981":todayPct>50?m.color:"#e2e8f0"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:"#1e293b"}}>{todayPct}%</div>
+                      <div style={{width:36,height:36,borderRadius:18,border:`3px solid ${todayPct===100?"#10b981":todayPct>50?m.color:"var(--border)"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:"var(--text)"}}>{todayPct}%</div>
                     </div>
                   </div>
                 );
@@ -799,12 +896,12 @@ export default function App(){
               })()}
               {/* Swap requests */}
               {swaps.filter(s=>s.status==="pending").length>0&&(
-                <div style={{background:"#ffffff",borderRadius:12,padding:12,marginBottom:10,border:"1px solid #8b5cf640"}}>
+                <div style={{background:"var(--card)",borderRadius:12,padding:12,marginBottom:10,border:"1px solid #8b5cf640"}}>
                   <div style={{fontSize:13,fontWeight:700,color:"#7c3aed",marginBottom:6}}>🔄 בקשות החלפה</div>
                   {swaps.filter(s=>s.status==="pending").map(s=>{const t=tasks.find(x=>x.id===s.taskId);return(
-                    <div key={s.id} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 0",borderBottom:"1px solid #e2e8f0"}}>
+                    <div key={s.id} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 0",borderBottom:"1px solid var(--border)"}}>
                       <span style={{fontSize:12}}>{t?.icon}</span>
-                      <span style={{fontSize:11,color:"#475569",flex:1}}>{FAMILY[s.from]?.name} → {FAMILY[s.to]?.name}: {t?.title}</span>
+                      <span style={{fontSize:11,color:"var(--textQuat)",flex:1}}>{FAMILY[s.from]?.name} → {FAMILY[s.to]?.name}: {t?.title}</span>
                       <button onClick={()=>approveSwap(s.id)} style={S.okBtn}>✓</button>
                       <button onClick={()=>rejectSwap(s.id)} style={S.noBtn}>✕</button>
                     </div>
@@ -816,7 +913,7 @@ export default function App(){
 
           {/* Family Goal */}
           <div style={{background:"linear-gradient(135deg,#ede9fe,#ddd6fe)",borderRadius:14,padding:14,border:"1px solid #4f46e580",marginBottom:10}}>
-            <div style={{fontSize:13,fontWeight:800,color:"#1e293b",marginBottom:8}}>🎯 יעד משפחתי</div>
+            <div style={{fontSize:13,fontWeight:800,color:"var(--text)",marginBottom:8}}>🎯 יעד משפחתי</div>
             {goals.filter(g=>g.active).map(g=>{
               const fp=getFamilyPct();const achieved=fp>=g.target;
               return(
@@ -824,7 +921,7 @@ export default function App(){
                   <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
                     <span style={{fontSize:16}}>{g.emoji}</span>
                     <div style={{flex:1}}>
-                      <div style={{fontSize:12,fontWeight:700,color:"#1e293b"}}>{g.title}</div>
+                      <div style={{fontSize:12,fontWeight:700,color:"var(--text)"}}>{g.title}</div>
                       <div style={{fontSize:10,color:"#6366f1"}}>{g.desc}</div>
                     </div>
                     {achieved&&<span style={{fontSize:11,color:"#10b981",fontWeight:700}}>✅ הושג!</span>}
@@ -837,6 +934,34 @@ export default function App(){
               );
             })}
           </div>
+
+          {/* Weekly Challenges */}
+          {(()=>{const wkCh=challenges.filter(c=>c.week===wk);if(!wkCh.length)return null;
+            return<div style={{background:"linear-gradient(135deg,#fef3c7,#fefce8)",borderRadius:14,padding:14,border:"1px solid #f59e0b80",marginBottom:10}}>
+              <div style={{fontSize:13,fontWeight:800,color:"var(--text)",marginBottom:8}}>🏆 אתגרי השבוע</div>
+              {wkCh.map(ch=>{const done=ch.type==="family"?Object.keys(ch.completedBy||{}).length>=CH.length
+                :CH.filter(c=>(ch.completedBy||{})[c]).length;
+                const total=ch.type==="family"?1:CH.length;
+                const pct=ch.type==="family"?(done?100:0):Math.round((done/total)*100);
+                return<div key={ch.id} style={{background:"rgba(245,158,11,0.06)",borderRadius:10,padding:10,marginBottom:6}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                    <span style={{fontSize:16}}>{ch.emoji}</span>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:12,fontWeight:700,color:"var(--text)"}}>{ch.title}</div>
+                      <div style={{fontSize:10,color:"#92400e"}}>{ch.desc}</div>
+                    </div>
+                    {pct===100&&<span style={{fontSize:11,color:"#10b981",fontWeight:700}}>✅</span>}
+                    <span style={{fontSize:9,color:"#7c3aed",fontWeight:700}}>+{ch.xpReward}XP</span>
+                  </div>
+                  <div style={{height:6,background:"rgba(0,0,0,0.08)",borderRadius:4,overflow:"hidden"}}>
+                    <div style={{height:"100%",width:`${pct}%`,background:pct===100?"#10b981":"#f59e0b",borderRadius:4,transition:"width 0.5s"}}/>
+                  </div>
+                  {ch.type==="individual"&&<div style={{fontSize:9,color:"var(--textSec)",marginTop:3}}>
+                    {CH.map(c=><span key={c} style={{marginLeft:6}}>{FAMILY[c]?.emoji} {(ch.completedBy||{})[c]?"✅":"⏳"}</span>)}
+                  </div>}
+                </div>;})}
+            </div>;
+          })()}
         </>
       )}
 
@@ -845,10 +970,10 @@ export default function App(){
         <>
           <h2 style={S.st}>💬 קיר משפחתי</h2>
           {/* Compose area */}
-          <div style={{background:"#ffffff",borderRadius:12,padding:10,marginBottom:10,border:"1px solid #e2e8f0"}}>
+          <div style={{background:"var(--card)",borderRadius:12,padding:10,marginBottom:10,border:"1px solid var(--border)"}}>
             {isP&&<div style={{display:"flex",gap:4,marginBottom:6,flexWrap:"wrap"}}>
-              <button onClick={()=>setWallTo("wall")} style={{padding:"4px 8px",borderRadius:8,fontSize:10,fontWeight:600,cursor:"pointer",background:wallTo==="wall"?"#6366f120":"#f8fafc",border:wallTo==="wall"?"2px solid #6366f1":"1px solid #e2e8f0",color:wallTo==="wall"?"#6366f1":"#64748b"}}>👨‍👩‍👧‍👦 כולם</button>
-              {CH.map(c=><button key={c} onClick={()=>setWallTo(c)} style={{padding:"4px 8px",borderRadius:8,fontSize:10,fontWeight:600,cursor:"pointer",background:wallTo===c?FAMILY[c].color+"20":"#f8fafc",border:wallTo===c?`2px solid ${FAMILY[c].color}`:"1px solid #e2e8f0",color:wallTo===c?FAMILY[c].color:"#64748b"}}>{FAMILY[c].name}</button>)}
+              <button onClick={()=>setWallTo("wall")} style={{padding:"4px 8px",borderRadius:8,fontSize:10,fontWeight:600,cursor:"pointer",background:wallTo==="wall"?"#6366f120":"var(--inputBg)",border:wallTo==="wall"?"2px solid #6366f1":"1px solid var(--border)",color:wallTo==="wall"?"#6366f1":"var(--textTer)"}}>👨‍👩‍👧‍👦 כולם</button>
+              {CH.map(c=><button key={c} onClick={()=>setWallTo(c)} style={{padding:"4px 8px",borderRadius:8,fontSize:10,fontWeight:600,cursor:"pointer",background:wallTo===c?FAMILY[c].color+"20":"var(--inputBg)",border:wallTo===c?`2px solid ${FAMILY[c].color}`:"1px solid var(--border)",color:wallTo===c?FAMILY[c].color:"var(--textTer)"}}>{FAMILY[c].name}</button>)}
             </div>}
             <div style={{display:"flex",gap:6}}>
               <input style={{...S.inp,marginBottom:0,flex:1}} placeholder={isP?"כתוב/י הודעה...":"כתוב/י להורים..."} value={wallText} onChange={e=>setWallText(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")sendWallMessage(wallText,isP?wallTo:"wall");}}/>
@@ -861,13 +986,13 @@ export default function App(){
             if(pending===0)return null;
             return<button key={c} onClick={()=>sendNudge(c)} style={{flex:1,padding:"6px 4px",background:FAMILY[c].color+"10",border:`1px solid ${FAMILY[c].color}40`,borderRadius:8,cursor:"pointer",textAlign:"center"}}>
               <div style={{fontSize:10,fontWeight:700,color:FAMILY[c].color}}>👋 {FAMILY[c].name}</div>
-              <div style={{fontSize:8,color:"#94a3b8"}}>{pending} משימות</div>
+              <div style={{fontSize:8,color:"var(--textSec)"}}>{pending} משימות</div>
             </button>;
           }).filter(Boolean);
           return nudgeBtns.length>0?<div style={{display:"flex",gap:4,marginBottom:10}}>{nudgeBtns}</div>:null;})()}
           {/* Message feed */}
           {(()=>{const wm=getWallMessages();
-            if(wm.length===0)return<div style={{textAlign:"center",padding:30}}><div style={{fontSize:36}}>💬</div><div style={{color:"#94a3b8",fontSize:12,marginTop:4}}>עדיין אין הודעות. כתבו משהו!</div></div>;
+            if(wm.length===0)return<div style={{textAlign:"center",padding:30}}><div style={{fontSize:36}}>💬</div><div style={{color:"var(--textSec)",fontSize:12,marginTop:4}}>עדיין אין הודעות. כתבו משהו!</div></div>;
             return wm.map(msg=>{
               const from=msg.from==="system"?null:FAMILY[msg.from];
               const isSystem=msg.type==="system";const isNudge=msg.type==="nudge";
@@ -877,16 +1002,16 @@ export default function App(){
               const dayAgo=Math.floor((Date.now()-msg.ts)/86400000);
               const dateStr=dayAgo===0?"היום":dayAgo===1?"אתמול":new Date(msg.ts).toLocaleDateString("he-IL",{weekday:"short",day:"numeric",month:"short"});
               return(
-                <div key={msg.id} style={{background:isSystem?"linear-gradient(135deg,#ede9fe,#ddd6fe)":isNudge?"linear-gradient(135deg,#fef3c7,#fffbeb)":"#ffffff",borderRadius:10,padding:10,marginBottom:4,border:isSystem?"1px solid #8b5cf640":isNudge?"1px solid #f59e0b40":isNew?"1px solid #6366f130":"1px solid #e2e8f0"}}>
+                <div key={msg.id} style={{background:isSystem?"linear-gradient(135deg,#ede9fe,#ddd6fe)":isNudge?"linear-gradient(135deg,#fef3c7,#fffbeb)":"var(--card)",borderRadius:10,padding:10,marginBottom:4,border:isSystem?"1px solid #8b5cf640":isNudge?"1px solid #f59e0b40":isNew?"1px solid #6366f130":"1px solid var(--border)"}}>
                   <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
                     {msg.star&&<span style={{fontSize:18}}>{msg.star}</span>}
                     <div style={{flex:1}}>
                       <div style={{fontSize:10,color:from?.color||"#8b5cf6",fontWeight:700}}>
                         {isSystem?"🤖 מערכת":from?.name||""}
-                        {msg.to!=="wall"&&FAMILY[msg.to]&&msg.to!==user&&<span style={{color:"#94a3b8",fontWeight:400}}> → {FAMILY[msg.to]?.name}</span>}
+                        {msg.to!=="wall"&&FAMILY[msg.to]&&msg.to!==user&&<span style={{color:"var(--textSec)",fontWeight:400}}> → {FAMILY[msg.to]?.name}</span>}
                       </div>
-                      <div style={{fontSize:12,color:"#1e293b",marginTop:2}}>{msg.text}</div>
-                      {task&&<div style={{fontSize:9,color:"#94a3b8",marginTop:2}}>{task.icon} {task.title}</div>}
+                      <div style={{fontSize:12,color:"var(--text)",marginTop:2}}>{msg.text}</div>
+                      {task&&<div style={{fontSize:9,color:"var(--textSec)",marginTop:2}}>{task.icon} {task.title}</div>}
                       <div style={{fontSize:8,color:"#cbd5e1",marginTop:2}}>{dateStr} {timeStr}</div>
                     </div>
                   </div>
@@ -894,8 +1019,8 @@ export default function App(){
                   <div style={{display:"flex",gap:3,marginTop:6,flexWrap:"wrap"}}>
                     {["👏","❤️","🔥","⭐","💪"].map(emoji=>{
                       const reactors=(msg.reactions||{})[emoji]||[];const iReacted=reactors.includes(user);
-                      return<button key={emoji} onClick={()=>toggleReaction(msg.id,emoji)} style={{padding:"2px 6px",borderRadius:12,fontSize:11,background:iReacted?"#6366f115":"#f8fafc",border:iReacted?"1px solid #6366f150":"1px solid #e2e8f0",cursor:"pointer",display:"flex",alignItems:"center",gap:2}}>
-                        {emoji}{reactors.length>0&&<span style={{fontSize:9,color:"#64748b",fontWeight:600}}>{reactors.length}</span>}
+                      return<button key={emoji} onClick={()=>toggleReaction(msg.id,emoji)} style={{padding:"2px 6px",borderRadius:12,fontSize:11,background:iReacted?"#6366f115":"var(--inputBg)",border:iReacted?"1px solid #6366f150":"1px solid var(--border)",cursor:"pointer",display:"flex",alignItems:"center",gap:2}}>
+                        {emoji}{reactors.length>0&&<span style={{fontSize:9,color:"var(--textTer)",fontWeight:600}}>{reactors.length}</span>}
                       </button>;
                     })}
                   </div>
@@ -920,17 +1045,17 @@ export default function App(){
         <>
           <div style={{fontSize:15,fontWeight:800,textAlign:"center",marginBottom:8}}>📅 לוח שנה</div>
           {/* Month nav */}
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,background:"#fff",borderRadius:12,padding:"8px 12px",border:"1px solid #e2e8f0"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,background:"#fff",borderRadius:12,padding:"8px 12px",border:"1px solid var(--border)"}}>
             <button onClick={calNext} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",color:"#6366f1",fontWeight:700}}>›</button>
             <div style={{textAlign:"center"}}>
-              <div style={{fontSize:13,fontWeight:700,color:"#1e293b"}}>{hebMonthName}</div>
-              <div style={{fontSize:10,color:"#64748b"}}>{GREG_MONTHS[calMonth]} {calYear}</div>
+              <div style={{fontSize:13,fontWeight:700,color:"var(--text)"}}>{hebMonthName}</div>
+              <div style={{fontSize:10,color:"var(--textTer)"}}>{GREG_MONTHS[calMonth]} {calYear}</div>
             </div>
             <button onClick={calPrev} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",color:"#6366f1",fontWeight:700}}>‹</button>
           </div>
           {/* Day headers */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:2}}>
-            {DS.map((d,i)=><div key={i} style={{textAlign:"center",fontSize:9,fontWeight:700,color:i===6?"#f59e0b":"#64748b",padding:"3px 0"}}>{d}</div>)}
+            {DS.map((d,i)=><div key={i} style={{textAlign:"center",fontSize:9,fontWeight:700,color:i===6?"#f59e0b":"var(--textTer)",padding:"3px 0"}}>{d}</div>)}
           </div>
           {/* Calendar grid */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:8}}>
@@ -945,10 +1070,10 @@ export default function App(){
               return(
                 <button key={day} onClick={()=>setCalSelDate(isSel?null:dk)}
                   style={{minHeight:44,padding:"2px 1px",background:isSel?"#6366f130":isToday?"#6366f110":hols.length>0?"#ede9fe":isSat?"#fef3c720":"#fff",
-                    border:isSel?"2px solid #6366f1":isToday?"2px solid #6366f160":"1px solid #e2e8f0",borderRadius:6,cursor:"pointer",
+                    border:isSel?"2px solid #6366f1":isToday?"2px solid #6366f160":"1px solid var(--border)",borderRadius:6,cursor:"pointer",
                     display:"flex",flexDirection:"column",alignItems:"center",gap:0,position:"relative"}}>
-                  <div style={{fontSize:12,fontWeight:isToday?800:600,color:isToday?"#6366f1":isSat?"#f59e0b":"#1e293b"}}>{day}</div>
-                  {hebDay&&<div style={{fontSize:6,color:"#94a3b8",lineHeight:1,marginTop:-1}}>{hebDay}</div>}
+                  <div style={{fontSize:12,fontWeight:isToday?800:600,color:isToday?"#6366f1":isSat?"#f59e0b":"var(--text)"}}>{day}</div>
+                  {hebDay&&<div style={{fontSize:6,color:"var(--textSec)",lineHeight:1,marginTop:-1}}>{hebDay}</div>}
                   {childDots.length>0&&<div style={{display:"flex",gap:1,marginTop:1}}>
                     {childDots.map(c=><span key={c} style={{width:4,height:4,borderRadius:2,background:FAMILY[c].color}}/>)}
                   </div>}
@@ -966,30 +1091,30 @@ export default function App(){
             const hols=holidays[calSelDate]||[];const evs=eventsForDate(calSelDate);
             const dayTasks=getTasksForDate(calSelDate);
             return(
-              <div style={{background:"#fff",borderRadius:12,padding:12,border:"1px solid #e2e8f0",marginBottom:8}}>
+              <div style={{background:"#fff",borderRadius:12,padding:12,border:"1px solid var(--border)",marginBottom:8}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
                   <div>
-                    <div style={{fontSize:13,fontWeight:700,color:"#1e293b"}}>{DAYS[dow]} {d.getDate()}/{d.getMonth()+1}</div>
+                    <div style={{fontSize:13,fontWeight:700,color:"var(--text)"}}>{DAYS[dow]} {d.getDate()}/{d.getMonth()+1}</div>
                     {hebFull&&<div style={{fontSize:10,color:"#6366f1"}}>{hebFull}</div>}
                   </div>
-                  <button onClick={()=>setCalSelDate(null)} style={{background:"none",border:"none",fontSize:14,cursor:"pointer",color:"#94a3b8"}}>✕</button>
+                  <button onClick={()=>setCalSelDate(null)} style={{background:"none",border:"none",fontSize:14,cursor:"pointer",color:"var(--textSec)"}}>✕</button>
                 </div>
                 {hols.map((h,i)=><div key={i} style={{fontSize:11,color:"#7c3aed",fontWeight:600,marginBottom:4}}>✡️ {h.title}</div>)}
                 {/* Tasks per child */}
                 {CH.map(cid=>{const ct=dayTasks[cid];if(!ct||ct.length===0)return null;
                   return(<div key={cid} style={{marginBottom:6}}>
                     <div style={{fontSize:10,fontWeight:700,color:FAMILY[cid].color,marginBottom:2}}>{FAMILY[cid].emoji} {FAMILY[cid].name}</div>
-                    {ct.map(t=><div key={t.id} style={{fontSize:10,color:"#475569",display:"flex",alignItems:"center",gap:4,marginBottom:1}}>
+                    {ct.map(t=><div key={t.id} style={{fontSize:10,color:"var(--textQuat)",display:"flex",alignItems:"center",gap:4,marginBottom:1}}>
                       <span>{t.completion?.approved?"✅":t.completion?.done?"⏳":"○"}</span>
                       <span>{t.icon} {t.title}</span>
                     </div>)}
                   </div>);
                 })}
                 {/* Custom events */}
-                {evs.length>0&&<div style={{borderTop:"1px solid #e2e8f0",paddingTop:6,marginTop:4}}>
+                {evs.length>0&&<div style={{borderTop:"1px solid var(--border)",paddingTop:6,marginTop:4}}>
                   {evs.map(ev=><div key={ev.id} style={{fontSize:10,display:"flex",alignItems:"center",gap:4,marginBottom:2}}>
                     <span>{ev.icon}</span><span style={{fontWeight:600}}>{ev.title}</span>
-                    {ev.recurring&&<span style={{fontSize:7,color:"#94a3b8"}}>🔁</span>}
+                    {ev.recurring&&<span style={{fontSize:7,color:"var(--textSec)"}}>🔁</span>}
                     {isP&&<button onClick={()=>deleteCalEvent(ev.id)} style={{marginRight:"auto",marginLeft:0,background:"none",border:"none",fontSize:10,color:"#ef4444",cursor:"pointer"}}>🗑</button>}
                   </div>)}
                 </div>}
@@ -1008,7 +1133,7 @@ export default function App(){
       {/* ══ GROCERY ══ */}
       {screen==="grocery"&&<>
         <h2 style={S.st}>🛒 רשימת קניות</h2>
-        <div style={{background:"#ffffff",borderRadius:12,padding:10,marginBottom:10,border:"1px solid #e2e8f0"}}>
+        <div style={{background:"var(--card)",borderRadius:12,padding:10,marginBottom:10,border:"1px solid var(--border)"}}>
           <div style={{display:"flex",gap:6,marginBottom:6}}>
             <input style={{...S.inp,marginBottom:0,flex:1}} placeholder="מוצר חדש..." value={groceryInput}
               onChange={e=>setGroceryInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")addGroceryItem();}}/>
@@ -1021,28 +1146,28 @@ export default function App(){
           </div>
           <button onClick={()=>setGroceryRecurring(!groceryRecurring)}
             style={{padding:"4px 8px",borderRadius:8,fontSize:10,fontWeight:600,cursor:"pointer",
-              background:groceryRecurring?"#6366f120":"#f8fafc",border:groceryRecurring?"2px solid #6366f1":"1px solid #e2e8f0",
-              color:groceryRecurring?"#6366f1":"#64748b"}}>🔁 מוצר קבוע</button>
+              background:groceryRecurring?"#6366f120":"var(--inputBg)",border:groceryRecurring?"2px solid #6366f1":"1px solid var(--border)",
+              color:groceryRecurring?"#6366f1":"var(--textTer)"}}>🔁 מוצר קבוע</button>
         </div>
         {GROCERY_CATEGORIES.filter(cat=>groceries.some(g=>g.category===cat.id)).map(cat=><div key={cat.id} style={{marginBottom:10}}>
-          <div style={{fontSize:12,fontWeight:700,color:"#1e293b",marginBottom:4}}>{cat.emoji} {cat.name}</div>
+          <div style={{fontSize:12,fontWeight:700,color:"var(--text)",marginBottom:4}}>{cat.emoji} {cat.name}</div>
           {groceries.filter(g=>g.category===cat.id).sort((a,b)=>a.bought-b.bought||b.ts-a.ts).map(g=><div key={g.id}
-            style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",background:g.bought?"#f8fafc":"#fff",borderRadius:8,marginBottom:2,border:"1px solid #e2e8f0"}}>
+            style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",background:g.bought?"var(--inputBg)":"#fff",borderRadius:8,marginBottom:2,border:"1px solid var(--border)"}}>
             <button onClick={()=>toggleGroceryBought(g.id)}
               style={{width:22,height:22,borderRadius:6,border:g.bought?"2px solid #10b981":"2px solid #cbd5e1",
                 background:g.bought?"#10b981":"transparent",color:"#fff",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
               {g.bought?"✓":""}</button>
-            <span style={{flex:1,fontSize:12,color:g.bought?"#94a3b8":"#1e293b",textDecoration:g.bought?"line-through":"none"}}>{g.title}</span>
+            <span style={{flex:1,fontSize:12,color:g.bought?"#94a3b8":"var(--text)",textDecoration:g.bought?"line-through":"none"}}>{g.title}</span>
             {g.recurring&&<span style={{fontSize:8,color:"#6366f1"}}>🔁</span>}
             <span style={{fontSize:8,color:"#cbd5e1"}}>{FAMILY[g.addedBy]?.name}</span>
             <button onClick={()=>deleteGroceryItem(g.id)} style={{background:"none",border:"none",color:"#ef4444",fontSize:11,cursor:"pointer"}}>🗑</button>
           </div>)}
         </div>)}
-        {groceries.length===0&&<div style={{textAlign:"center",padding:30}}><div style={{fontSize:36}}>🛒</div><div style={{color:"#94a3b8",fontSize:12,marginTop:4}}>הרשימה ריקה</div></div>}
+        {groceries.length===0&&<div style={{textAlign:"center",padding:30}}><div style={{fontSize:36}}>🛒</div><div style={{color:"var(--textSec)",fontSize:12,marginTop:4}}>הרשימה ריקה</div></div>}
         {groceries.some(g=>g.bought)&&<button onClick={clearBoughtGroceries}
           style={{width:"100%",padding:10,background:"#ef444420",border:"1px solid #ef444440",borderRadius:12,color:"#ef4444",fontSize:12,fontWeight:700,cursor:"pointer",marginTop:8}}>
           🧹 נקה פריטים שנקנו</button>}
-        <div style={{textAlign:"center",marginTop:8,fontSize:10,color:"#94a3b8"}}>{groceries.filter(g=>!g.bought).length} פריטים • {groceries.filter(g=>g.bought).length} נקנו</div>
+        <div style={{textAlign:"center",marginTop:8,fontSize:10,color:"var(--textSec)"}}>{groceries.filter(g=>!g.bought).length} פריטים • {groceries.filter(g=>g.bought).length} נקנו</div>
       </>}
 
       {/* ══ TASKS ══ */}
@@ -1071,14 +1196,14 @@ export default function App(){
                         <span style={{fontSize:18}}>{task.icon}</span>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
-                            <span style={{fontSize:12,fontWeight:700,color:"#1e293b"}}>{task.title}</span>
+                            <span style={{fontSize:12,fontWeight:700,color:"var(--text)"}}>{task.title}</span>
                             <span style={S.wt}>{task.weight}נק׳ {wpct}%</span>
                             {task.type==="shared"&&<span style={{fontSize:7,fontWeight:700,color:"#8b5cf6",background:"#8b5cf615",padding:"1px 5px",borderRadius:5}}>📋 תורנות</span>}
                           </div>
                           <div style={{fontSize:9,marginTop:1}}>
                             {appd?<span style={{color:"#10b981"}}>✅ {FAMILY[comp.approvedBy]?.name}</span>
                               :done?<span style={{color:"#f59e0b"}}>⏳</span>
-                              :<span style={{color:"#475569"}}>טרם בוצע</span>}
+                              :<span style={{color:"var(--textQuat)"}}>טרם בוצע</span>}
                           </div>
                         </div>
                         <div style={{display:"flex",gap:3,alignItems:"center",flexShrink:0}}>
@@ -1101,7 +1226,7 @@ export default function App(){
                       <div style={S.tr}>
                         <span style={{fontSize:16}}>{t.icon}</span>
                         <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:12,fontWeight:700,color:"#1e293b"}}>{t.title} <span style={{fontSize:9,color:"#7c3aed"}}>⭐</span></div>
+                          <div style={{fontSize:12,fontWeight:700,color:"var(--text)"}}>{t.title} <span style={{fontSize:9,color:"#7c3aed"}}>⭐</span></div>
                           <div style={{fontSize:9}}>{c.approved?<span style={{color:"#10b981"}}>✅ בונוס</span>:<span style={{color:"#f59e0b"}}>⏳</span>}</div>
                         </div>
                         {c.photo&&<button onClick={()=>setPhotoModal({view:c.photo})} style={S.vBtn}>🖼</button>}
@@ -1121,15 +1246,15 @@ export default function App(){
         <h2 style={S.st}>🏅 תגים והישגים</h2>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
           {DEFAULT_BADGES.map(badge=>{const earned=myBadges.some(b=>b.id===badge.id);return(
-            <div key={badge.id} style={{background:earned?"linear-gradient(135deg,#fef3c7,#fffbeb)":"#f8fafc",borderRadius:12,padding:12,textAlign:"center",
-              border:earned?"2px solid #f59e0b":"1px solid #e2e8f0",opacity:earned?1:0.5}}>
+            <div key={badge.id} style={{background:earned?"linear-gradient(135deg,#fef3c7,#fffbeb)":"var(--inputBg)",borderRadius:12,padding:12,textAlign:"center",
+              border:earned?"2px solid #f59e0b":"1px solid var(--border)",opacity:earned?1:0.5}}>
               <div style={{fontSize:28}}>{earned?badge.emoji:"❓"}</div>
-              <div style={{fontSize:10,fontWeight:700,color:earned?"#1e293b":"#94a3b8",marginTop:4}}>{earned?badge.title:"???"}</div>
+              <div style={{fontSize:10,fontWeight:700,color:earned?"#1e293b":"var(--textSec)",marginTop:4}}>{earned?badge.title:"???"}</div>
               {earned&&<div style={{fontSize:8,color:"#f59e0b",marginTop:2}}>{badge.desc}</div>}
             </div>);
           })}
         </div>
-        <div style={{textAlign:"center",marginTop:12,fontSize:11,color:"#94a3b8"}}>{myBadges.length}/{DEFAULT_BADGES.length} תגים נפתחו</div>
+        <div style={{textAlign:"center",marginTop:12,fontSize:11,color:"var(--textSec)"}}>{myBadges.length}/{DEFAULT_BADGES.length} תגים נפתחו</div>
         {(()=>{const myPens=(penalties||[]).filter(p=>p.childId===user).sort((a,b)=>b.ts-a.ts).slice(0,10);
           if(!myPens.length)return null;
           return<>
@@ -1139,7 +1264,7 @@ export default function App(){
                 <span style={{fontSize:18}}>{pen?.emoji||"⚠️"}</span>
                 <div style={{flex:1}}>
                   <div style={{fontSize:12,fontWeight:700,color:"#dc2626"}}>{pen?.label||"קנס"}</div>
-                  <div style={{fontSize:9,color:"#94a3b8"}}>{new Date(p.ts).toLocaleDateString("he-IL")}</div>
+                  <div style={{fontSize:9,color:"var(--textSec)"}}>{new Date(p.ts).toLocaleDateString("he-IL")}</div>
                 </div>
                 <span style={{fontSize:12,fontWeight:800,color:"#dc2626"}}>-{pen?.xp||0} XP</span>
               </div>);
@@ -1155,6 +1280,13 @@ export default function App(){
         const achievements=getRecentAchievements();
         return<>
         <h2 style={S.st}>📊 דוחות וסטטיסטיקות</h2>
+        <button onClick={()=>{const wc=getWeekCompletionCount();const leading=getLeadingChild();
+          setWeeklySummaryData({completionPct:wc.total>0?Math.round((wc.done/wc.total)*100):0,leading,
+            perChild:CH.map(cid=>{const st=getWeekStats(cid);return{cid,...st};}),familyStreak:getFamilyStreak(),totalXp:getWeekXpTotal()});
+          setShowSummaryModal(true);}}
+          style={{width:"100%",padding:10,background:"linear-gradient(135deg,#6366f120,#6366f110)",border:"1px solid #6366f140",borderRadius:12,color:"#6366f1",fontSize:12,fontWeight:700,cursor:"pointer",marginBottom:12}}>
+          📊 סיכום שבועי
+        </button>
 
         {/* SummaryCards 2x2 */}
         <div style={S.rpGrid}>
@@ -1192,7 +1324,7 @@ export default function App(){
               <div style={S.rpBarBg}>
                 <div style={{...S.rpBar,width:`${st.pct}%`,background:`linear-gradient(90deg,${m.color},${m.color}cc)`}}/>
               </div>
-              <div style={{display:"flex",gap:4,fontSize:9,color:"#64748b"}}>
+              <div style={{display:"flex",gap:4,fontSize:9,color:"var(--textTer)"}}>
                 <span>בוצעו: {st.dc}</span><span>•</span><span>אושרו: {st.ac}</span><span>•</span><span>חסרים: {st.tc-st.dc}</span>
                 {m.weeklyPay>0&&<><span>•</span><span style={{color:"#10b981",fontWeight:700}}>{st.earned}₪/{m.weeklyPay}₪</span></>}
               </div>
@@ -1207,21 +1339,21 @@ export default function App(){
             {/* Header row */}
             <div/>
             {Array.from({length:24},(_, h)=>
-              <div key={h} style={{textAlign:"center",color:"#94a3b8",fontSize:7,lineHeight:"12px"}}>{h%6===0?h:""}</div>
+              <div key={h} style={{textAlign:"center",color:"var(--textSec)",fontSize:7,lineHeight:"12px"}}>{h%6===0?h:""}</div>
             )}
             {/* Day rows */}
             {[0,1,2,3,4,5,6].map(day=><div key={day} style={{display:"contents"}}>
-              <div style={{fontSize:9,color:"#64748b",display:"flex",alignItems:"center",fontWeight:600}}>{DS[day]}</div>
+              <div style={{fontSize:9,color:"var(--textTer)",display:"flex",alignItems:"center",fontWeight:600}}>{DS[day]}</div>
               {heatmap[day].map((count,h)=>{
                 const intensity=count>0?Math.min(1,count/heatMax*1.5):0;
-                return<div key={h} style={{...S.rpHeatCell,background:intensity>0?`rgba(99,102,241,${0.15+intensity*0.75})`:"#f1f5f9",
+                return<div key={h} style={{...S.rpHeatCell,background:intensity>0?`rgba(99,102,241,${0.15+intensity*0.75})`:"var(--barBg)",
                   borderRadius:2}} title={`${DS[day]} ${h}:00 — ${count} משימות`}/>;
               })}
             </div>)}
           </div>
-          <div style={{display:"flex",justifyContent:"center",gap:8,marginTop:6,fontSize:8,color:"#94a3b8"}}>
+          <div style={{display:"flex",justifyContent:"center",gap:8,marginTop:6,fontSize:8,color:"var(--textSec)"}}>
             <span>פחות</span>
-            {[0,0.25,0.5,0.75,1].map((v,i)=><div key={i} style={{width:10,height:10,borderRadius:2,background:v===0?"#f1f5f9":`rgba(99,102,241,${0.15+v*0.75})`}}/>)}
+            {[0,0.25,0.5,0.75,1].map((v,i)=><div key={i} style={{width:10,height:10,borderRadius:2,background:v===0?"var(--barBg)":`rgba(99,102,241,${0.15+v*0.75})`}}/>)}
             <span>יותר</span>
           </div>
         </div>
@@ -1250,15 +1382,15 @@ export default function App(){
         {/* Recent Achievements */}
         <div style={S.rpSection}>
           <div style={S.rpSt}>🏅 הישגים אחרונים</div>
-          {achievements.length===0?<div style={{textAlign:"center",padding:12,color:"#94a3b8",fontSize:11}}>עדיין אין הישגים</div>
+          {achievements.length===0?<div style={{textAlign:"center",padding:12,color:"var(--textSec)",fontSize:11}}>עדיין אין הישגים</div>
           :achievements.slice(0,10).map((a,i)=>(
             <div key={i} style={S.rpAchieve}>
               <span style={{fontSize:22}}>{a.badge.emoji}</span>
               <div style={{flex:1}}>
-                <div style={{fontSize:11,fontWeight:700,color:"#1e293b"}}>{a.badge.title}</div>
-                <div style={{fontSize:9,color:"#64748b"}}>{FAMILY[a.childId]?.name} • {a.badge.desc}</div>
+                <div style={{fontSize:11,fontWeight:700,color:"var(--text)"}}>{a.badge.title}</div>
+                <div style={{fontSize:9,color:"var(--textTer)"}}>{FAMILY[a.childId]?.name} • {a.badge.desc}</div>
               </div>
-              {a.ts>0&&<span style={{fontSize:8,color:"#94a3b8"}}>{new Date(a.ts).toLocaleDateString("he-IL")}</span>}
+              {a.ts>0&&<span style={{fontSize:8,color:"var(--textSec)"}}>{new Date(a.ts).toLocaleDateString("he-IL")}</span>}
             </div>
           ))}
         </div>
@@ -1269,7 +1401,7 @@ export default function App(){
           {exams.slice().reverse().slice(0,10).map(ex=>(
             <div key={ex.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderBottom:"1px solid #f1f5f9"}}>
               <span style={{fontSize:13,fontWeight:700,color:FAMILY[ex.childId]?.color}}>{FAMILY[ex.childId]?.name}</span>
-              <span style={{flex:1,fontSize:11,color:"#64748b"}}>ציון {ex.score}</span>
+              <span style={{flex:1,fontSize:11,color:"var(--textTer)"}}>ציון {ex.score}</span>
               <span style={{fontSize:12,fontWeight:700,color:"#10b981"}}>+{ex.bonus}₪</span>
             </div>
           ))}
@@ -1281,14 +1413,14 @@ export default function App(){
         const pend=[];tasks.forEach(t=>t.assignedTo.forEach(c=>{for(let d=0;d<7;d++){const k=cKey(t.id,c,d);if(completions[k]?.done&&!completions[k]?.approved)pend.push({t,c,d,comp:completions[k]});}}));
         return<>
           <h2 style={S.st}>✅ אישורים ({pend.length})</h2>
-          {pend.length===0?<div style={{textAlign:"center",padding:"30px"}}><div style={{fontSize:36}}>🎉</div><div style={{color:"#94a3b8",fontSize:12,marginTop:4}}>אין ממתינים</div></div>
+          {pend.length===0?<div style={{textAlign:"center",padding:"30px"}}><div style={{fontSize:36}}>🎉</div><div style={{color:"var(--textSec)",fontSize:12,marginTop:4}}>אין ממתינים</div></div>
           :pend.map((p,i)=>(
-            <div key={i} style={{background:"#ffffff",borderRadius:10,padding:10,marginBottom:5,border:`1px solid ${p.t.bonus?"#8b5cf630":"#f59e0b25"}`}}>
+            <div key={i} style={{background:"var(--card)",borderRadius:10,padding:10,marginBottom:5,border:`1px solid ${p.t.bonus?"#8b5cf630":"#f59e0b25"}`}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
                 <span style={{fontSize:14}}>{p.t.icon}</span>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:12,fontWeight:700,color:"#1e293b"}}>{p.t.title}{p.t.bonus?" ⭐":""}</div>
-                  <div style={{fontSize:9,color:"#94a3b8"}}>{FAMILY[p.c].name} • {DAYS[p.d]} • {p.t.weight}נק׳</div>
+                  <div style={{fontSize:12,fontWeight:700,color:"var(--text)"}}>{p.t.title}{p.t.bonus?" ⭐":""}</div>
+                  <div style={{fontSize:9,color:"var(--textSec)"}}>{FAMILY[p.c].name} • {DAYS[p.d]} • {p.t.weight}נק׳</div>
                 </div>
                 {p.comp.photo&&<button onClick={()=>setPhotoModal({view:p.comp.photo})} style={S.vBtn}>🖼</button>}
               </div>
@@ -1304,21 +1436,26 @@ export default function App(){
       {/* ══ MANAGE ══ */}
       {screen==="manage"&&isP&&<>
         <div style={{display:"flex",gap:3,marginBottom:12,overflowX:"auto",paddingBottom:2}}>
-          {[{id:"tasks",l:"📋"},{id:"add",l:"➕"},{id:"suggest",l:"💡"},{id:"weights",l:"⚖️"},{id:"goals",l:"🎯"},{id:"reminders",l:"⏰"},{id:"pins",l:"🔒"}].map(t=>(
+          {[{id:"tasks",l:"📋"},{id:"add",l:"➕"},{id:"suggest",l:"💡"},{id:"weights",l:"⚖️"},{id:"goals",l:"🎯"},{id:"reminders",l:"⏰"},{id:"pins",l:"🔒"},{id:"log",l:"📜"}].map(t=>(
             <button key={t.id} onClick={()=>setManageSub(t.id)}
               style={{...S.subT,...(manageSub===t.id?{background:"#6366f1",color:"#fff"}:{})}}>{t.l}</button>
           ))}
         </div>
 
-        {manageSub==="tasks"&&tasks.filter(t=>!t.bonus).map(t=>(
-          <div key={t.id} style={{background:"#ffffff",borderRadius:10,padding:10,marginBottom:5,border:"1px solid #e2e8f0"}}>
+        {manageSub==="tasks"&&tasks.filter(t=>!t.bonus).map((t,idx)=>(
+          <div key={t.id} draggable onDragStart={()=>setDragIdx(idx)} onDragOver={e=>{e.preventDefault();setDragOverIdx(idx);}}
+            onDrop={()=>{if(dragIdx!==null&&dragIdx!==idx)reorderTasks(dragIdx,idx);setDragIdx(null);setDragOverIdx(null);}}
+            onDragEnd={()=>{setDragIdx(null);setDragOverIdx(null);}}
+            style={{background:"var(--card)",borderRadius:10,padding:10,marginBottom:5,border:"1px solid var(--border)",
+              opacity:dragIdx===idx?0.5:1,borderTop:dragOverIdx===idx&&dragIdx!==null&&dragIdx>idx?"2px solid #6366f1":undefined,
+              borderBottom:dragOverIdx===idx&&dragIdx!==null&&dragIdx<idx?"2px solid #6366f1":undefined,cursor:"grab"}}>
             {editTask===t.id?(
               <div>
                 <input style={S.inp} value={t.title} onChange={e=>updateTask(t.id,{title:e.target.value})}/>
                 <div style={{display:"flex",gap:4,alignItems:"center",marginBottom:6}}>
-                  <span style={{fontSize:10,color:"#94a3b8"}}>משקל:</span>
+                  <span style={{fontSize:10,color:"var(--textSec)"}}>משקל:</span>
                   <button onClick={()=>changeWeight(t.id,-1)} style={S.wB}>−</button>
-                  <span style={{fontSize:14,fontWeight:800,color:"#1e293b"}}>{t.weight}</span>
+                  <span style={{fontSize:14,fontWeight:800,color:"var(--text)"}}>{t.weight}</span>
                   <button onClick={()=>changeWeight(t.id,1)} style={S.wB}>+</button>
                 </div>
                 <div style={{display:"flex",gap:3,marginBottom:6}}>
@@ -1333,9 +1470,10 @@ export default function App(){
               </div>
             ):(
               <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <span style={{fontSize:14,cursor:"grab",color:"var(--textSec)",userSelect:"none"}}>⠿</span>
                 <span style={{fontSize:16}}>{t.icon}</span>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:"#1e293b"}}>{t.title}</div>
-                  <div style={{fontSize:9,color:"#64748b"}}>{t.weight}נק׳ • {t.assignedTo.map(c=>FAMILY[c]?.name).join(", ")} {t.type==="shared"?"• 📋 רוטציה":""}</div></div>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:"var(--text)"}}>{t.title}</div>
+                  <div style={{fontSize:9,color:"var(--textTer)"}}>{t.weight}נק׳ • {t.assignedTo.map(c=>FAMILY[c]?.name).join(", ")} {t.type==="shared"?"• 📋 רוטציה":""}</div></div>
                 <button onClick={()=>setEditTask(t.id)} style={S.eBtn}>✏️</button>
                 <button onClick={()=>deleteTask(t.id)} style={S.dBtn}>🗑</button>
               </div>
@@ -1344,18 +1482,18 @@ export default function App(){
         ))}
 
         {manageSub==="add"&&(
-          <div style={{background:"#ffffff",borderRadius:12,padding:14,border:"1px solid #e2e8f0"}}>
+          <div style={{background:"var(--card)",borderRadius:12,padding:14,border:"1px solid var(--border)"}}>
             <input style={S.inp} placeholder="שם המשימה" value={newTask.title} onChange={e=>setNewTask({...newTask,title:e.target.value})}/>
             <div style={{display:"flex",gap:4,alignItems:"center",marginBottom:8}}>
-              <span style={{fontSize:10,color:"#94a3b8"}}>משקל:</span>
+              <span style={{fontSize:10,color:"var(--textSec)"}}>משקל:</span>
               <button onClick={()=>setNewTask({...newTask,weight:Math.max(1,newTask.weight-1)})} style={S.wB}>−</button>
-              <span style={{fontSize:14,fontWeight:800,color:"#1e293b"}}>{newTask.weight}</span>
+              <span style={{fontSize:14,fontWeight:800,color:"var(--text)"}}>{newTask.weight}</span>
               <button onClick={()=>setNewTask({...newTask,weight:newTask.weight+1})} style={S.wB}>+</button>
             </div>
             <div style={{display:"flex",flexWrap:"wrap",gap:3,marginBottom:8}}>
               {["✨","🛏️","🍽️","🫧","🗑️","🧹","👕","🧽","🐕","📚","🚿","🪴","🍳","🥪","👟","♻️","🧸","🛌","🥘","🪟","🌿","🎒"].map(em=>(
                 <button key={em} onClick={()=>setNewTask({...newTask,icon:em})}
-                  style={{width:30,height:30,fontSize:14,background:newTask.icon===em?"#6366f120":"#f1f5f9",border:newTask.icon===em?"2px solid #6366f1":"1px solid #e2e8f0",borderRadius:7,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{em}</button>
+                  style={{width:30,height:30,fontSize:14,background:newTask.icon===em?"#6366f120":"var(--barBg)",border:newTask.icon===em?"2px solid #6366f1":"1px solid var(--border)",borderRadius:7,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{em}</button>
               ))}
             </div>
             <div style={{display:"flex",gap:3,marginBottom:10}}>
@@ -1365,7 +1503,7 @@ export default function App(){
             <div style={{display:"flex",gap:4,marginBottom:10}}>
               {[{v:"personal",l:"🏠 אישי"},{v:"shared",l:"📋 משפחתי (רוטציה)"}].map(opt=>(
                 <button key={opt.v} onClick={()=>setNewTask({...newTask,type:opt.v})}
-                  style={{flex:1,padding:"6px 4px",background:newTask.type===opt.v?"#6366f120":"#f8fafc",border:newTask.type===opt.v?"2px solid #6366f1":"1px solid #e2e8f0",borderRadius:8,color:newTask.type===opt.v?"#6366f1":"#64748b",fontSize:10,fontWeight:600,cursor:"pointer"}}>{opt.l}</button>
+                  style={{flex:1,padding:"6px 4px",background:newTask.type===opt.v?"#6366f120":"var(--inputBg)",border:newTask.type===opt.v?"2px solid #6366f1":"1px solid var(--border)",borderRadius:8,color:newTask.type===opt.v?"#6366f1":"var(--textTer)",fontSize:10,fontWeight:600,cursor:"pointer"}}>{opt.l}</button>
               ))}
             </div>
             <button onClick={()=>setNewTask({...newTask,requirePhoto:!newTask.requirePhoto})}
@@ -1381,7 +1519,7 @@ export default function App(){
               {SUGGESTED.filter(s=>s.cat===cat).map((s,i)=>{const ex=tasks.find(t=>t.title===s.title);return(
                 <button key={i} onClick={()=>!ex&&addSuggested(s)}
                   style={{padding:"5px 8px",borderRadius:8,fontSize:10,fontWeight:600,cursor:ex?"default":"pointer",
-                    background:ex?"#10b98120":"#ffffff",border:ex?"1px solid #10b98150":"1px solid #e2e8f0",
+                    background:ex?"#10b98120":"var(--card)",border:ex?"1px solid #10b98150":"1px solid var(--border)",
                     color:ex?"#10b981":"#cbd5e1",opacity:ex?0.7:1}}>{s.icon}{s.title}({s.weight}){ex?"✓":""}</button>
               );})}
             </div>
@@ -1389,17 +1527,17 @@ export default function App(){
         ))}
 
         {manageSub==="weights"&&CH.map(cid=>{const m=FAMILY[cid];const ct=tasks.filter(t=>t.assignedTo.includes(cid)&&!t.bonus);const tw=ct.reduce((s,t)=>s+t.weight,0);return(
-          <div key={cid} style={{background:"#ffffff",borderRadius:10,padding:12,marginBottom:6,border:"1px solid #e2e8f0"}}>
+          <div key={cid} style={{background:"var(--card)",borderRadius:10,padding:12,marginBottom:6,border:"1px solid var(--border)"}}>
             <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
               <span style={{fontSize:12,fontWeight:700,color:m.color}}>{m.name}</span>
-              <span style={{marginRight:"auto",marginLeft:0,fontSize:10,color:"#64748b"}}>{tw}נק׳</span>
+              <span style={{marginRight:"auto",marginLeft:0,fontSize:10,color:"var(--textTer)"}}>{tw}נק׳</span>
             </div>
             {ct.sort((a,b)=>b.weight-a.weight).map(t=>{const pct=tw>0?Math.round((t.weight/tw)*100):0;return(
-              <div key={t.id} style={{display:"flex",alignItems:"center",gap:4,padding:"3px 0",borderBottom:"1px solid #e2e8f0"}}>
+              <div key={t.id} style={{display:"flex",alignItems:"center",gap:4,padding:"3px 0",borderBottom:"1px solid var(--border)"}}>
                 <span style={{fontSize:11}}>{t.icon}</span>
-                <span style={{fontSize:10,color:"#475569",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</span>
+                <span style={{fontSize:10,color:"var(--textQuat)",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</span>
                 <button onClick={()=>changeWeight(t.id,-1)} style={S.wBs}>−</button>
-                <span style={{fontSize:11,fontWeight:800,color:"#1e293b",minWidth:16,textAlign:"center"}}>{t.weight}</span>
+                <span style={{fontSize:11,fontWeight:800,color:"var(--text)",minWidth:16,textAlign:"center"}}>{t.weight}</span>
                 <button onClick={()=>changeWeight(t.id,1)} style={S.wBs}>+</button>
                 <span style={{fontSize:8,fontWeight:700,color:"#6366f1",minWidth:22,textAlign:"center"}}>{pct}%</span>
               </div>
@@ -1410,13 +1548,13 @@ export default function App(){
         {manageSub==="goals"&&<>
           <h3 style={S.st}>🎯 יעדים משפחתיים</h3>
           {goals.map((g,i)=>(
-            <div key={g.id} style={{background:"#ffffff",borderRadius:10,padding:12,marginBottom:6,border:"1px solid #e2e8f0"}}>
+            <div key={g.id} style={{background:"var(--card)",borderRadius:10,padding:12,marginBottom:6,border:"1px solid var(--border)"}}>
               <div style={{display:"flex",alignItems:"center",gap:6}}>
                 <span style={{fontSize:18}}>{g.emoji}</span>
-                <div style={{flex:1}}><div style={{fontSize:12,fontWeight:700,color:"#1e293b"}}>{g.title}</div>
-                  <div style={{fontSize:10,color:"#94a3b8"}}>{g.desc} • פרס: {g.reward}</div></div>
+                <div style={{flex:1}}><div style={{fontSize:12,fontWeight:700,color:"var(--text)"}}>{g.title}</div>
+                  <div style={{fontSize:10,color:"var(--textSec)"}}>{g.desc} • פרס: {g.reward}</div></div>
                 <button onClick={()=>{const ng=goals.map(x=>x.id===g.id?{...x,active:!x.active}:x);setGoals(ng);save({goals:ng});}}
-                  style={{padding:"4px 10px",background:g.active?"#10b98120":"#f1f5f9",border:`1px solid ${g.active?"#10b98150":"#e2e8f0"}`,borderRadius:7,color:g.active?"#10b981":"#64748b",fontSize:10,cursor:"pointer"}}>{g.active?"פעיל":"כבוי"}</button>
+                  style={{padding:"4px 10px",background:g.active?"#10b98120":"var(--barBg)",border:`1px solid ${g.active?"#10b98150":"var(--border)"}`,borderRadius:7,color:g.active?"#10b981":"var(--textTer)",fontSize:10,cursor:"pointer"}}>{g.active?"פעיל":"כבוי"}</button>
               </div>
             </div>
           ))}
@@ -1424,19 +1562,19 @@ export default function App(){
 
         {manageSub==="reminders"&&<>
           <h3 style={S.st}>⏰ תזכורות יומיות</h3>
-          <p style={{fontSize:10,color:"#94a3b8",margin:"0 0 10px"}}>תזכורות מופיעות במסך הבית של הילדים</p>
+          <p style={{fontSize:10,color:"var(--textSec)",margin:"0 0 10px"}}>תזכורות מופיעות במסך הבית של הילדים</p>
           {REMINDERS.map(r=>{const active=activeReminders.includes(r.id);return(
-            <div key={r.id} style={{background:"#ffffff",borderRadius:10,padding:12,marginBottom:6,border:"1px solid #e2e8f0",display:"flex",alignItems:"center",gap:10}}>
+            <div key={r.id} style={{background:"var(--card)",borderRadius:10,padding:12,marginBottom:6,border:"1px solid var(--border)",display:"flex",alignItems:"center",gap:10}}>
               <span style={{fontSize:22}}>{r.emoji}</span>
-              <div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:"#1e293b"}}>{r.label}</div>
-                <div style={{fontSize:11,color:"#94a3b8"}}>{r.time}</div></div>
+              <div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:"var(--text)"}}>{r.label}</div>
+                <div style={{fontSize:11,color:"var(--textSec)"}}>{r.time}</div></div>
               <button onClick={()=>{const na=active?activeReminders.filter(x=>x!==r.id):[...activeReminders,r.id];setActiveReminders(na);save({activeReminders:na});}}
-                style={{padding:"6px 14px",background:active?"#10b981":"#f1f5f9",border:`1px solid ${active?"#10b98150":"#e2e8f0"}`,borderRadius:8,color:active?"#fff":"#64748b",fontSize:11,fontWeight:700,cursor:"pointer"}}>{active?"✓ פעיל":"כבוי"}</button>
+                style={{padding:"6px 14px",background:active?"#10b981":"var(--barBg)",border:`1px solid ${active?"#10b98150":"var(--border)"}`,borderRadius:8,color:active?"#fff":"var(--textTer)",fontSize:11,fontWeight:700,cursor:"pointer"}}>{active?"✓ פעיל":"כבוי"}</button>
             </div>
           );})}
           <div style={{marginTop:12,padding:12,background:"#eff6ff",borderRadius:10,border:"1px solid #bfdbfe"}}>
             <div style={{fontSize:12,fontWeight:700,color:"#1e40af",marginBottom:6}}>🔔 התראות דפדפן</div>
-            <p style={{fontSize:10,color:"#64748b",margin:"0 0 8px"}}>קבלו התראות כשיש משימות ממתינות (עובד כשהדפדפן פתוח)</p>
+            <p style={{fontSize:10,color:"var(--textTer)",margin:"0 0 8px"}}>קבלו התראות כשיש משימות ממתינות (עובד כשהדפדפן פתוח)</p>
             <button onClick={async()=>{if(!("Notification"in window)){flash("הדפדפן לא תומך בהתראות");return;}
               const p=await Notification.requestPermission();flash(p==="granted"?"✅ התראות הופעלו!":"❌ ההתראות נחסמו");}}
               style={{padding:"8px 16px",background:typeof Notification!=="undefined"&&Notification.permission==="granted"?"#10b981":"#6366f1",border:"none",borderRadius:8,color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>
@@ -1446,24 +1584,41 @@ export default function App(){
         </>}
 
         {manageSub==="pins"&&Object.entries(FAMILY).map(([id,m])=>(
-          <div key={id} style={{background:"#ffffff",borderRadius:10,padding:10,marginBottom:5,border:"1px solid #e2e8f0"}}>
+          <div key={id} style={{background:"var(--card)",borderRadius:10,padding:10,marginBottom:5,border:"1px solid var(--border)"}}>
             {changePinUser===id?(
               <div style={{display:"flex",alignItems:"center",gap:6}}>
                 <span style={{fontSize:12,fontWeight:700,color:m.color}}>{m.name}</span>
                 <input style={{...S.inp,marginBottom:0,width:70,textAlign:"center",padding:"5px"}} placeholder="4 ספרות" maxLength={4}
                   value={newPinVal} onChange={e=>setNewPinVal(e.target.value.replace(/\D/g,"").slice(0,4))} type="tel"/>
                 <button onClick={()=>updatePin(id,newPinVal)} style={{background:"#10b981",border:"none",borderRadius:6,color:"#fff",fontSize:10,padding:"5px 10px",cursor:"pointer"}}>💾</button>
-                <button onClick={()=>{setChangePinUser(null);setNewPinVal("");}} style={{background:"none",border:"none",color:"#64748b",cursor:"pointer",fontSize:11}}>✕</button>
+                <button onClick={()=>{setChangePinUser(null);setNewPinVal("");}} style={{background:"none",border:"none",color:"var(--textTer)",cursor:"pointer",fontSize:11}}>✕</button>
               </div>
             ):(
               <div style={{display:"flex",alignItems:"center",gap:6}}>
                 <span style={{fontSize:12,fontWeight:700,color:m.color,flex:1}}>{m.name}</span>
-                <span style={{fontSize:10,color:"#475569",letterSpacing:3}}>••••</span>
+                <span style={{fontSize:10,color:"var(--textQuat)",letterSpacing:3}}>••••</span>
                 <button onClick={()=>{setChangePinUser(id);setNewPinVal("");}} style={{padding:"4px 8px",background:"#6366f120",border:"1px solid #6366f150",borderRadius:6,color:"#6366f1",fontSize:10,cursor:"pointer"}}>שנה</button>
               </div>
             )}
           </div>
         ))}
+
+        {manageSub==="log"&&<>
+          <h3 style={S.st}>📜 יומן פעולות</h3>
+          {auditLog.length===0&&<p style={{textAlign:"center",color:"var(--textSec)",fontSize:11}}>אין פעולות עדיין</p>}
+          {auditLog.slice(0,100).map(e=>{const labels={task_done:"✅ ביצוע משימה",approved:"👍 אישור",rejected:"❌ דחייה",penalty_added:"⚠️ קנס",
+            task_created:"✨ יצירת משימה",task_deleted:"🗑️ מחיקת משימה",task_updated:"✏️ עדכון משימה",pin_changed:"🔒 שינוי PIN",
+            bonus_submitted:"⭐ יוזמה",swap_requested:"🔄 בקשת החלפה",swap_approved:"🔄 החלפה אושרה",swap_rejected:"❌ החלפה נדחתה",
+            exam_added:"📝 מבחן",cal_event_added:"📅 אירוע חדש",cal_event_deleted:"🗑️ מחיקת אירוע"};
+            return<div key={e.id} style={{background:"#fff",borderRadius:8,padding:"8px 10px",marginBottom:3,border:"1px solid var(--border)",display:"flex",alignItems:"center",gap:8}}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:11,fontWeight:600,color:"var(--text)"}}>{labels[e.action]||e.action}</div>
+                <div style={{fontSize:9,color:"var(--textSec)"}}>{FAMILY[e.by]?.name||"מערכת"} • {new Date(e.ts).toLocaleString("he-IL")}
+                {e.childId&&e.childId!==e.by?` • ${FAMILY[e.childId]?.name}`:""}
+                {e.title?` • ${e.title}`:""}</div>
+              </div>
+            </div>;})}
+        </>}
       </>}
 
       </div>
@@ -1473,11 +1628,11 @@ export default function App(){
         <div style={S.ov} onClick={()=>setSwapModal(null)}>
           <div style={S.md} onClick={e=>e.stopPropagation()}>
             <h3 style={S.mt}>🔄 החלף משימה</h3>
-            <p style={{color:"#94a3b8",fontSize:11,textAlign:"center",margin:"0 0 10px"}}>בחר/י למי להעביר את המשימה:</p>
+            <p style={{color:"var(--textSec)",fontSize:11,textAlign:"center",margin:"0 0 10px"}}>בחר/י למי להעביר את המשימה:</p>
             <div style={{display:"flex",flexDirection:"column",gap:6}}>
               {CH.filter(c=>c!==swapModal.from).map(c=>(
                 <button key={c} onClick={()=>{requestSwap(swapModal.taskId,swapModal.from,c);setSwapModal(null);}}
-                  style={{padding:12,background:"#f1f5f9",border:"1px solid #e2e8f0",borderRadius:10,color:"#1e293b",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
+                  style={{padding:12,background:"var(--barBg)",border:"1px solid var(--border)",borderRadius:10,color:"var(--text)",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
                   <span style={{fontWeight:700,color:FAMILY[c].color}}>{FAMILY[c].name}</span>
                 </button>
               ))}
@@ -1496,14 +1651,14 @@ export default function App(){
             <div style={{display:"flex",flexWrap:"wrap",gap:3,marginBottom:8}}>
               {["⭐","💪","🧹","🍳","🌟","🎨","📖","🏃","🛠️","❤️","🤝","🌈"].map(em=>(
                 <button key={em} onClick={()=>setBonusIcon(em)}
-                  style={{width:32,height:32,fontSize:16,background:bonusIcon===em?"#8b5cf620":"#f1f5f9",border:bonusIcon===em?"2px solid #8b5cf6":"1px solid #e2e8f0",borderRadius:7,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{em}</button>
+                  style={{width:32,height:32,fontSize:16,background:bonusIcon===em?"#8b5cf620":"var(--barBg)",border:bonusIcon===em?"2px solid #8b5cf6":"1px solid var(--border)",borderRadius:7,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{em}</button>
               ))}
             </div>
             <input ref={bonusFileRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={handleBonusPhoto}/>
             {bonusPhoto?<div style={{position:"relative",marginBottom:8}}>
               <img src={bonusPhoto} alt="" style={{width:"100%",borderRadius:8,maxHeight:140,objectFit:"cover"}}/>
               <button onClick={()=>setBonusPhoto(null)} style={{position:"absolute",top:4,left:4,background:"#ef4444",border:"none",borderRadius:6,color:"#fff",fontSize:10,width:20,height:20,cursor:"pointer"}}>✕</button>
-            </div>:<button onClick={()=>bonusFileRef.current?.click()} style={{width:"100%",padding:8,background:"#f1f5f9",border:"1px dashed #334155",borderRadius:8,color:"#94a3b8",fontSize:11,cursor:"pointer",marginBottom:8}}>📷 תמונה</button>}
+            </div>:<button onClick={()=>bonusFileRef.current?.click()} style={{width:"100%",padding:8,background:"var(--barBg)",border:"1px dashed #334155",borderRadius:8,color:"var(--textSec)",fontSize:11,cursor:"pointer",marginBottom:8}}>📷 תמונה</button>}
             <button onClick={submitBonus} style={{width:"100%",padding:10,background:"linear-gradient(135deg,#7c3aed,#8b5cf6)",border:"none",borderRadius:10,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:4}}>⭐ שלח</button>
             <button onClick={()=>setBonusModal(false)} style={S.mc}>ביטול</button>
           </div>
@@ -1522,7 +1677,7 @@ export default function App(){
               <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{display:"none"}}
                 onChange={e=>{handlePhoto(e,photoModal.taskId,photoModal.childId,photoModal.day);setPhotoModal(null);}}/>
               <button onClick={()=>fileRef.current?.click()} style={{width:"100%",padding:10,background:"linear-gradient(135deg,#6366f1,#8b5cf6)",border:"none",borderRadius:10,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:5}}>📸 צלם</button>
-              <button onClick={()=>{markDone(photoModal.taskId,photoModal.childId,photoModal.day,null);setPhotoModal(null);}} style={{width:"100%",padding:7,background:"rgba(255,255,255,0.05)",border:"1px solid #e2e8f0",borderRadius:8,color:"#94a3b8",fontSize:10,cursor:"pointer",marginBottom:5}}>דלג</button>
+              <button onClick={()=>{markDone(photoModal.taskId,photoModal.childId,photoModal.day,null);setPhotoModal(null);}} style={{width:"100%",padding:7,background:"rgba(255,255,255,0.05)",border:"1px solid var(--border)",borderRadius:8,color:"var(--textSec)",fontSize:10,cursor:"pointer",marginBottom:5}}>דלג</button>
               <button onClick={()=>setPhotoModal(null)} style={S.mc}>ביטול</button>
             </>}
           </div>
@@ -1534,7 +1689,7 @@ export default function App(){
         <div style={S.ov} onClick={()=>setDoneConfirm(null)}>
           <div style={S.md} onClick={e=>e.stopPropagation()}>
             <h3 style={S.mt}>✅ סיום משימה</h3>
-            <p style={{color:"#64748b",fontSize:12,textAlign:"center",margin:"0 0 12px"}}>רוצה להוסיף תמונה?</p>
+            <p style={{color:"var(--textTer)",fontSize:12,textAlign:"center",margin:"0 0 12px"}}>רוצה להוסיף תמונה?</p>
             <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{display:"none"}}
               onChange={e=>{handlePhoto(e,doneConfirm.taskId,doneConfirm.childId,doneConfirm.day);setDoneConfirm(null);}}/>
             <button onClick={()=>fileRef.current?.click()}
@@ -1555,14 +1710,14 @@ export default function App(){
         <div style={S.ov} onClick={()=>setPenaltyModal(null)}>
           <div style={S.md} onClick={e=>e.stopPropagation()}>
             <h3 style={S.mt}>⚠️ הורדת נקודות - {FAMILY[penaltyModal.childId]?.name}</h3>
-            <p style={{color:"#64748b",fontSize:11,textAlign:"center",margin:"0 0 10px"}}>בחר/י סיבה:</p>
+            <p style={{color:"var(--textTer)",fontSize:11,textAlign:"center",margin:"0 0 10px"}}>בחר/י סיבה:</p>
             <div style={{display:"flex",flexDirection:"column",gap:6}}>
               {PENALTIES.map(p=>(
                 <button key={p.id} onClick={()=>addPenalty(penaltyModal.childId,p.id)}
                   style={{padding:12,background:"#fff5f5",border:"1px solid #ef444430",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:10,textAlign:"right"}}>
                   <span style={{fontSize:22}}>{p.icon}</span>
                   <div style={{flex:1}}>
-                    <div style={{fontSize:12,fontWeight:700,color:"#1e293b"}}>{p.title}</div>
+                    <div style={{fontSize:12,fontWeight:700,color:"var(--text)"}}>{p.title}</div>
                     <div style={{fontSize:10,color:"#ef4444"}}>-{p.xp} XP</div>
                   </div>
                 </button>
@@ -1581,21 +1736,21 @@ export default function App(){
             <h3 style={S.mt}>📅 אירוע חדש — {calEventModal.date}</h3>
             <input style={S.inp} placeholder="שם האירוע..." value={calNewEvent.title}
               onChange={e=>setCalNewEvent(p=>({...p,title:e.target.value}))}/>
-            <div style={{fontSize:10,fontWeight:600,color:"#64748b",marginBottom:4}}>אייקון:</div>
+            <div style={{fontSize:10,fontWeight:600,color:"var(--textTer)",marginBottom:4}}>אייקון:</div>
             <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8}}>
               {["📌","🎂","📚","🏫","👨‍⚕️","🎵","⚽","🎉","🕯️","💼","🛫","🎭"].map(em=>(
                 <button key={em} onClick={()=>setCalNewEvent(p=>({...p,icon:em}))}
                   style={{...S.chip,...(calNewEvent.icon===em?{borderColor:"#6366f1",background:"#6366f115",color:"#6366f1"}:{})}}>{em}</button>
               ))}
             </div>
-            <div style={{fontSize:10,fontWeight:600,color:"#64748b",marginBottom:4}}>סוג:</div>
+            <div style={{fontSize:10,fontWeight:600,color:"var(--textTer)",marginBottom:4}}>סוג:</div>
             <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8}}>
               {[{id:"custom",l:"מותאם"},{id:"birthday",l:"🎂 יום הולדת"},{id:"class",l:"📚 חוג"},{id:"meeting",l:"👨‍⚕️ פגישה"}].map(t=>(
                 <button key={t.id} onClick={()=>setCalNewEvent(p=>({...p,type:t.id}))}
                   style={{...S.chip,...(calNewEvent.type===t.id?{borderColor:"#6366f1",background:"#6366f115",color:"#6366f1"}:{})}}>{t.l}</button>
               ))}
             </div>
-            <div style={{fontSize:10,fontWeight:600,color:"#64748b",marginBottom:4}}>חוזר:</div>
+            <div style={{fontSize:10,fontWeight:600,color:"var(--textTer)",marginBottom:4}}>חוזר:</div>
             <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8}}>
               {[{id:null,l:"חד פעמי"},{id:"weekly",l:"שבועי"},{id:"monthly",l:"חודשי"},{id:"yearly",l:"שנתי"}].map(r=>(
                 <button key={r.id||"none"} onClick={()=>setCalNewEvent(p=>({...p,recurring:r.id}))}
@@ -1615,17 +1770,17 @@ export default function App(){
             <h3 style={S.mt}>📝 דיווח ציון מבחן</h3>
             {examModal===true?(
               <>{/* Select child */}
-                <p style={{color:"#64748b",fontSize:11,textAlign:"center",margin:"0 0 10px"}}>בחר/י ילד/ה:</p>
+                <p style={{color:"var(--textTer)",fontSize:11,textAlign:"center",margin:"0 0 10px"}}>בחר/י ילד/ה:</p>
                 <div style={{display:"flex",flexDirection:"column",gap:6}}>
                   {CH.map(c=><button key={c} onClick={()=>setExamModal({childId:c})}
-                    style={{padding:12,background:"#f1f5f9",border:"1px solid #e2e8f0",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
+                    style={{padding:12,background:"var(--barBg)",border:"1px solid var(--border)",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
                     <span style={{fontWeight:700,color:FAMILY[c].color}}>{FAMILY[c].name}</span>
                   </button>)}
                 </div>
               </>
             ):(
               <>{/* Enter score */}
-                <p style={{color:"#64748b",fontSize:11,textAlign:"center",margin:"0 0 10px"}}>ציון של {FAMILY[examModal.childId]?.name}:</p>
+                <p style={{color:"var(--textTer)",fontSize:11,textAlign:"center",margin:"0 0 10px"}}>ציון של {FAMILY[examModal.childId]?.name}:</p>
                 <input style={{...S.inp,textAlign:"center",fontSize:24,fontWeight:800}} type="number" min="0" max="100" placeholder="0-100"
                   value={examScore} onChange={e=>setExamScore(e.target.value.slice(0,3))}/>
                 {examScore&&parseInt(examScore)>=90&&(
@@ -1647,14 +1802,14 @@ export default function App(){
         <div style={S.ov} onClick={()=>setPraiseModal(null)}>
           <div style={S.md} onClick={e=>e.stopPropagation()}>
             <h3 style={S.mt}>{praiseStar||"👍"} שבח ל{FAMILY[praiseModal.childId]?.name}</h3>
-            <p style={{color:"#64748b",fontSize:11,textAlign:"center",margin:"0 0 10px"}}>
+            <p style={{color:"var(--textTer)",fontSize:11,textAlign:"center",margin:"0 0 10px"}}>
               {tasks.find(t=>t.id===praiseModal.taskId)?.icon} {tasks.find(t=>t.id===praiseModal.taskId)?.title}
             </p>
             <input style={S.inp} placeholder="כתוב/י מילה טובה..." value={praiseText} onChange={e=>setPraiseText(e.target.value)}/>
             <div style={{display:"flex",gap:6,marginBottom:10,justifyContent:"center"}}>
               {["⭐","🌟","💪","🏆","❤️","👏"].map(s=>(
                 <button key={s} onClick={()=>setPraiseStar(praiseStar===s?null:s)}
-                  style={{width:36,height:36,fontSize:18,background:praiseStar===s?"#f59e0b20":"#f1f5f9",border:praiseStar===s?"2px solid #f59e0b":"1px solid #e2e8f0",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{s}</button>
+                  style={{width:36,height:36,fontSize:18,background:praiseStar===s?"#f59e0b20":"var(--barBg)",border:praiseStar===s?"2px solid #f59e0b":"1px solid var(--border)",borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{s}</button>
               ))}
             </div>
             <button onClick={submitPraise}
@@ -1662,10 +1817,39 @@ export default function App(){
               ✅ אשר{praiseText.trim()?" ושלח":""}
             </button>
             <button onClick={()=>{approve(praiseModal.taskId,praiseModal.childId,praiseModal.day);setPraiseModal(null);}}
-              style={{width:"100%",padding:7,background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,color:"#64748b",fontSize:10,cursor:"pointer",marginBottom:5}}>
+              style={{width:"100%",padding:7,background:"var(--inputBg)",border:"1px solid var(--border)",borderRadius:8,color:"var(--textTer)",fontSize:10,cursor:"pointer",marginBottom:5}}>
               אשר בלי הודעה
             </button>
             <button onClick={()=>setPraiseModal(null)} style={S.mc}>ביטול</button>
+          </div>
+        </div>
+      )}
+
+      {/* WEEKLY SUMMARY MODAL */}
+      {showSummaryModal&&weeklySummaryData&&(
+        <div style={S.ov} onClick={()=>setShowSummaryModal(false)}>
+          <div style={{...S.md,maxWidth:340}} onClick={e=>e.stopPropagation()}>
+            <h3 style={S.mt}>📊 סיכום שבועי</h3>
+            <div style={{fontSize:36,textAlign:"center",marginBottom:4}}>{weeklySummaryData.completionPct>=80?"🏆":weeklySummaryData.completionPct>=50?"👍":"💪"}</div>
+            <div style={{fontSize:22,fontWeight:800,color:weeklySummaryData.completionPct>=80?"#10b981":"#f59e0b",textAlign:"center"}}>{weeklySummaryData.completionPct}%</div>
+            <div style={{fontSize:11,color:"var(--textTer)",textAlign:"center",marginBottom:12}}>השלמה משפחתית</div>
+            {CH.map(cid=>{const cd=weeklySummaryData.perChild.find(p=>p.cid===cid);if(!cd)return null;
+              return<div key={cid} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid #f1f5f9"}}>
+                <span style={{fontSize:16}}>{FAMILY[cid]?.emoji}</span>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:12,fontWeight:700,color:FAMILY[cid]?.color}}>{FAMILY[cid]?.name}</div>
+                  <div style={{fontSize:9,color:"var(--textSec)"}}>{cd.pct}% • {cd.earned}₪</div>
+                </div>
+                <div style={{width:50,height:6,background:"var(--barBg)",borderRadius:3,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${cd.pct}%`,background:FAMILY[cid]?.color,borderRadius:3}}/>
+                </div>
+              </div>;})}
+            <div style={{display:"flex",justifyContent:"space-around",marginTop:12,padding:10,background:"var(--inputBg)",borderRadius:10}}>
+              <div style={{textAlign:"center"}}><div style={{fontSize:14,fontWeight:800,color:"#6366f1"}}>{weeklySummaryData.totalXp}</div><div style={{fontSize:8,color:"var(--textSec)"}}>XP</div></div>
+              <div style={{textAlign:"center"}}><div style={{fontSize:14,fontWeight:800,color:"#f59e0b"}}>🔥 {weeklySummaryData.familyStreak}</div><div style={{fontSize:8,color:"var(--textSec)"}}>רצף</div></div>
+              <div style={{textAlign:"center"}}><div style={{fontSize:14}}>{FAMILY[weeklySummaryData.leading]?.emoji}</div><div style={{fontSize:8,color:"var(--textSec)"}}>מוביל/ה</div></div>
+            </div>
+            <button onClick={()=>setShowSummaryModal(false)} style={{...S.mc,marginTop:10}}>סגור</button>
           </div>
         </div>
       )}
@@ -1674,37 +1858,37 @@ export default function App(){
 }
 
 const S={
-  lw:{minHeight:"100vh",background:"linear-gradient(140deg,#fef9f0,#f0e6ff 40%,#e0f2fe)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Segoe UI',Tahoma,sans-serif",direction:"rtl",padding:12},
-  lc:{background:"#ffffff",borderRadius:20,padding:"24px 18px",width:"100%",maxWidth:360,textAlign:"center",border:"1px solid #e2e8f0",boxShadow:"0 20px 40px rgba(0,0,0,0.08)"},
+  lw:{minHeight:"100vh",background:"var(--loginBg)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Segoe UI',Tahoma,sans-serif",direction:"rtl",padding:12},
+  lc:{background:"var(--card)",borderRadius:20,padding:"24px 18px",width:"100%",maxWidth:360,textAlign:"center",border:"1px solid var(--border)",boxShadow:"0 20px 40px rgba(0,0,0,0.08)"},
   ug:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8},
-  ub:{background:"#fefefe",border:"2px solid #e2e8f0",borderRadius:14,padding:"12px 6px",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,transition:"all 0.3s",boxShadow:"0 2px 8px rgba(0,0,0,0.04)"},
+  ub:{background:"#fefefe",border:"2px solid var(--border)",borderRadius:14,padding:"12px 6px",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,transition:"all 0.3s",boxShadow:"0 2px 8px rgba(0,0,0,0.04)"},
 
-  app:{minHeight:"100vh",background:"linear-gradient(180deg,#fef9f0,#f0e6ff)",fontFamily:"'Segoe UI',Tahoma,sans-serif",color:"#1e293b",paddingBottom:28},
-  toast:{position:"fixed",top:10,left:"50%",transform:"translateX(-50%)",background:"#ffffff",color:"#1e293b",padding:"7px 16px",borderRadius:10,fontSize:11,fontWeight:600,zIndex:1000,border:"1px solid #e2e8f0",boxShadow:"0 6px 16px rgba(0,0,0,0.1)"},
+  app:{minHeight:"100vh",background:"var(--appBg)",fontFamily:"'Segoe UI',Tahoma,sans-serif",color:"var(--text)",paddingBottom:28},
+  toast:{position:"fixed",top:10,left:"50%",transform:"translateX(-50%)",background:"var(--card)",color:"var(--text)",padding:"7px 16px",borderRadius:10,fontSize:11,fontWeight:600,zIndex:1000,border:"1px solid var(--border)",boxShadow:"0 6px 16px rgba(0,0,0,0.1)",animation:"toastSlide 0.3s ease"},
   header:{background:"linear-gradient(135deg,#6366f1,#8b5cf6,#ec4899)",padding:"10px 12px 8px",borderRadius:"0 0 16px 16px"},
   hTop:{display:"flex",alignItems:"center",gap:8},
   backBtn:{background:"rgba(255,255,255,0.2)",border:"none",borderRadius:8,width:30,height:30,color:"#fff",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"},
   bonusFab:{background:"linear-gradient(135deg,#7c3aed,#8b5cf6)",border:"none",borderRadius:8,padding:"5px 10px",color:"#fff",fontSize:10,fontWeight:700,cursor:"pointer"},
   dayRow:{display:"flex",gap:2,marginBottom:10,overflowX:"auto"},
-  dayBtn:{flex:1,minWidth:36,padding:"5px 2px",background:"#f8fafc",border:"2px solid transparent",borderRadius:8,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:0,transition:"all 0.2s",color:"#64748b"},
+  dayBtn:{flex:1,minWidth:36,padding:"5px 2px",background:"var(--inputBg)",border:"2px solid transparent",borderRadius:8,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:0,transition:"all 0.2s",color:"var(--textTer)"},
   dayAct:{background:"rgba(99,102,241,0.15)",borderColor:"#6366f1",color:"#4338ca"},
   tabs:{display:"flex",gap:1,padding:"6px 8px 0",justifyContent:"center"},
-  tab:{padding:"7px 12px",background:"transparent",border:"none",borderBottom:"2px solid transparent",color:"#94a3b8",fontSize:14,cursor:"pointer",borderRadius:"6px 6px 0 0",transition:"all 0.2s"},
+  tab:{padding:"7px 12px",background:"transparent",border:"none",borderBottom:"2px solid transparent",color:"var(--textSec)",fontSize:14,cursor:"pointer",borderRadius:"6px 6px 0 0",transition:"all 0.2s"},
   tabA:{color:"#6366f1",borderBottomColor:"#6366f1",background:"rgba(99,102,241,0.08)"},
-  subT:{padding:"5px 10px",background:"#f1f5f9",border:"1px solid #e2e8f0",borderRadius:8,color:"#64748b",fontSize:11,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"},
+  subT:{padding:"5px 10px",background:"var(--barBg)",border:"1px solid var(--border)",borderRadius:8,color:"var(--textTer)",fontSize:11,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"},
   content:{padding:"10px 10px 20px"},
   secH:{display:"flex",alignItems:"center",gap:6,marginBottom:5,padding:"0 2px"},
-  bdg:{marginRight:"auto",marginLeft:0,fontSize:9,color:"#64748b",fontWeight:600,background:"#f1f5f9",padding:"1px 7px",borderRadius:7},
-  st:{fontSize:15,fontWeight:800,color:"#1e293b",margin:"0 0 10px"},
+  bdg:{marginRight:"auto",marginLeft:0,fontSize:9,color:"var(--textTer)",fontWeight:600,background:"var(--barBg)",padding:"1px 7px",borderRadius:7},
+  st:{fontSize:15,fontWeight:800,color:"var(--text)",margin:"0 0 10px"},
 
-  tc:{background:"#ffffff",borderRadius:10,padding:"8px 10px",marginBottom:3,border:"1px solid #e2e8f0",transition:"all 0.3s",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"},
+  tc:{background:"var(--card)",borderRadius:10,padding:"8px 10px",marginBottom:3,border:"1px solid var(--border)",transition:"all 0.3s",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"},
   tD:{borderColor:"#f59e0b40",background:"linear-gradient(135deg,#fffbeb,#fef3c7)"},
   tA:{borderColor:"#10b98140",background:"linear-gradient(135deg,#ecfdf5,#d1fae5)"},
   tr:{display:"flex",alignItems:"center",gap:7},
   wt:{fontSize:8,fontWeight:700,color:"#6366f1",background:"#6366f115",padding:"1px 5px",borderRadius:5},
 
-  wB:{width:26,height:26,background:"#f1f5f9",border:"1px solid #e2e8f0",borderRadius:6,color:"#1e293b",fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"},
-  wBs:{width:18,height:18,background:"#f1f5f9",border:"1px solid #e2e8f0",borderRadius:4,color:"#1e293b",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"},
+  wB:{width:26,height:26,background:"var(--barBg)",border:"1px solid var(--border)",borderRadius:6,color:"var(--text)",fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"},
+  wBs:{width:18,height:18,background:"var(--barBg)",border:"1px solid var(--border)",borderRadius:4,color:"var(--text)",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"},
 
   doneBtn:{minWidth:34,height:34,background:"#10b981",border:"none",borderRadius:9,color:"#fff",fontSize:15,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"},
   camBtn:{minWidth:34,height:34,background:"#6366f1",border:"none",borderRadius:9,color:"#fff",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"},
@@ -1716,23 +1900,23 @@ const S={
   bOk:{flex:1,padding:8,background:"#10b981",border:"none",borderRadius:8,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"},
   bNo:{flex:1,padding:8,background:"#ef4444",border:"none",borderRadius:8,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"},
 
-  dc:{background:"#ffffff",borderRadius:12,padding:12,marginBottom:8,border:"1px solid #e2e8f0",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"},
+  dc:{background:"var(--card)",borderRadius:12,padding:12,marginBottom:8,border:"1px solid var(--border)",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"},
 
-  inp:{width:"100%",padding:"8px 10px",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,color:"#1e293b",fontSize:12,outline:"none",marginBottom:8,boxSizing:"border-box",direction:"rtl"},
-  chip:{padding:"4px 8px",background:"#f8fafc",border:"2px solid #e2e8f0",borderRadius:14,cursor:"pointer",fontSize:10,color:"#64748b",fontWeight:600,transition:"all 0.2s"},
+  inp:{width:"100%",padding:"8px 10px",background:"var(--inputBg)",border:"1px solid var(--border)",borderRadius:8,color:"var(--text)",fontSize:12,outline:"none",marginBottom:8,boxSizing:"border-box",direction:"rtl"},
+  chip:{padding:"4px 8px",background:"var(--inputBg)",border:"2px solid var(--border)",borderRadius:14,cursor:"pointer",fontSize:10,color:"var(--textTer)",fontWeight:600,transition:"all 0.2s"},
 
-  ov:{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:12},
-  md:{background:"#ffffff",borderRadius:16,padding:18,width:"100%",maxWidth:300,border:"1px solid #e2e8f0",direction:"rtl",maxHeight:"88vh",overflowY:"auto",boxShadow:"0 20px 40px rgba(0,0,0,0.12)"},
-  mt:{fontSize:14,fontWeight:800,color:"#1e293b",margin:"0 0 8px",textAlign:"center"},
-  mc:{width:"100%",padding:6,background:"transparent",border:"none",color:"#94a3b8",fontSize:10,cursor:"pointer"},
+  ov:{position:"fixed",inset:0,background:"var(--overlay)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:12},
+  md:{background:"var(--card)",borderRadius:16,padding:18,width:"100%",maxWidth:300,border:"1px solid var(--border)",direction:"rtl",maxHeight:"88vh",overflowY:"auto",boxShadow:"0 20px 40px rgba(0,0,0,0.12)",animation:"cardPop 0.2s ease"},
+  mt:{fontSize:14,fontWeight:800,color:"var(--text)",margin:"0 0 8px",textAlign:"center"},
+  mc:{width:"100%",padding:6,background:"transparent",border:"none",color:"var(--textSec)",fontSize:10,cursor:"pointer"},
   rpGrid:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14},
-  rpCard:{background:"#ffffff",borderRadius:12,padding:14,textAlign:"center",border:"1px solid #e2e8f0",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"},
-  rpBig:{fontSize:24,fontWeight:800,color:"#1e293b",marginBottom:0},
-  rpLabel:{fontSize:9,color:"#64748b",fontWeight:600,marginTop:4},
-  rpSection:{background:"#ffffff",borderRadius:14,padding:14,marginBottom:12,border:"1px solid #e2e8f0"},
-  rpSt:{fontSize:13,fontWeight:800,color:"#1e293b",marginBottom:10,textAlign:"center"},
+  rpCard:{background:"var(--card)",borderRadius:12,padding:14,textAlign:"center",border:"1px solid var(--border)",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"},
+  rpBig:{fontSize:24,fontWeight:800,color:"var(--text)",marginBottom:0},
+  rpLabel:{fontSize:9,color:"var(--textTer)",fontWeight:600,marginTop:4},
+  rpSection:{background:"var(--card)",borderRadius:14,padding:14,marginBottom:12,border:"1px solid var(--border)"},
+  rpSt:{fontSize:13,fontWeight:800,color:"var(--text)",marginBottom:10,textAlign:"center"},
   rpBar:{height:18,borderRadius:6,transition:"width 0.5s ease"},
-  rpBarBg:{height:18,background:"#f1f5f9",borderRadius:6,overflow:"hidden",marginBottom:4},
+  rpBarBg:{height:18,background:"var(--barBg)",borderRadius:6,overflow:"hidden",marginBottom:4},
   rpHeatCell:{width:"100%",aspectRatio:"1",borderRadius:2,minWidth:0},
   rpHeatGrid:{display:"grid",gridTemplateColumns:"28px repeat(24,1fr)",gap:1,fontSize:7},
   rpAchieve:{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid #f1f5f9"},
