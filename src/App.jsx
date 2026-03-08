@@ -7,6 +7,7 @@ import { FAMILY, CH, FAMILY_NAME, DAYS, DS, DEFAULT_PINS, LEVELS, REMINDERS, PEN
   INIT_TASKS, DEFAULT_GOALS, GROCERY_CATEGORIES, DEFAULT_CHALLENGES } from "./constants.js";
 import { compressImage, getWk, getToday, getHour, getTimeStr, dateKey, getWkForDate } from "./utils.js";
 import { isTaskForChild as _isTaskForChild, getLevel as _getLevel, getNextLevel as _getNextLevel, getXpProgress as _getXpProgress, getNewBadges } from "./logic.js";
+import { signInWithGoogle, signOut as authSignOut, onAuthChange, generateFamilyCode } from "./auth.js";
 // Animations
 import Confetti from "./components/animations/Confetti.jsx";
 import LevelUp from "./components/animations/LevelUp.jsx";
@@ -37,8 +38,13 @@ import ExamModal from "./components/modals/ExamModal.jsx";
 import PraiseModal from "./components/modals/PraiseModal.jsx";
 import WeeklySummaryModal from "./components/modals/WeeklySummaryModal.jsx";
 
+// Set Firestore collection path based on family code (before component renders)
+(()=>{try{const fc=JSON.parse(localStorage.getItem('family-chores_family-config')||'{}');
+  if(fc.familyId)storage.setCollection(`families/${fc.familyId}/data`);}catch{}})();
+
 export default function App(){
   const[familyConfigured,setFamilyConfigured]=useState(()=>!!localStorage.getItem('family-chores_family-config'));
+  const[googleUser,setGoogleUser]=useState(null);
   const[user,setUser]=useState(null);
   const[screen,setScreen]=useState("login");
   const[pinScreen,setPinScreen]=useState(null);
@@ -169,10 +175,30 @@ export default function App(){
     window.addEventListener("offline",off);window.addEventListener("online",on);
     return()=>{window.removeEventListener("offline",off);window.removeEventListener("online",on);};},[]);
   useEffect(()=>{if(!user||!("Notification" in window))return;
-    const iv=setInterval(()=>{if(Notification.permission!=="granted"||!user||FAMILY[user]?.role==="parent")return;
-      const h=getHour();const pending=tasks.filter(t=>isTaskForChild(t,user,getToday())&&!t.bonus&&!completions[`${getWk()}_${t.id}_${user}_${getToday()}`]?.done).length;
-      if(pending>0&&(h===7||h===14||h===19)){
-        try{new Notification("משימות המשפחה",{body:`יש לך ${pending} משימות ממתינות${(streaks[user]||0)>0?" • הסטריק שלך בסכנה! 🔥":""}`,icon:"/icon-192.png"});}catch{}}
+    // Request notification permission on first login
+    if(Notification.permission==="default"){Notification.requestPermission();}
+    const notifKey=(id)=>`notif_${id}_${getToday()}`;
+    const iv=setInterval(()=>{if(Notification.permission!=="granted"||!user)return;
+      const h=getHour();const isChild=FAMILY[user]?.role!=="parent";
+      if(isChild){
+        const pending=tasks.filter(t=>isTaskForChild(t,user,getToday())&&!t.bonus&&!completions[`${getWk()}_${t.id}_${user}_${getToday()}`]?.done).length;
+        if(pending===0)return;
+        const streak=streaks[user]||0;
+        const morningMsgs=[`☀️ בוקר טוב! יש לך ${pending} משימות להיום`,`🌅 יום חדש, ${pending} משימות מחכות לך!`,`💪 בוא נתחיל! ${pending} משימות ממתינות`];
+        const afternoonMsgs=[`🕐 אחה"צ טוב! נשארו ${pending} משימות`,`📋 עוד ${pending} משימות ואתה סיימת!`,`⏰ אל תשכח — ${pending} משימות פתוחות`];
+        const eveningMsgs=[`🌙 ערב! עוד ${pending} משימות לסגור`,`⚡ רגע אחרון — ${pending} משימות פתוחות${streak>0?" • הסטריק שלך בסכנה! 🔥":""}`,`🏃 סיום היום: ${pending} משימות ממתינות`];
+        let body=null,nKey=null;
+        if(h===7&&!sessionStorage.getItem(notifKey('m'))){body=morningMsgs[Math.floor(Math.random()*morningMsgs.length)];nKey='m';}
+        else if(h===14&&!sessionStorage.getItem(notifKey('a'))){body=afternoonMsgs[Math.floor(Math.random()*afternoonMsgs.length)];nKey='a';}
+        else if(h===19&&!sessionStorage.getItem(notifKey('e'))){body=eveningMsgs[Math.floor(Math.random()*eveningMsgs.length)];nKey='e';}
+        if(body){try{new Notification("משימות המשפחה 🏠",{body,icon:"/icon-192.png",dir:"rtl",lang:"he",tag:"chores-"+nKey});sessionStorage.setItem(notifKey(nKey),'1');}catch{}}
+      } else {
+        // Parent: notify about pending approvals
+        const pendingApprove=Object.entries(completions).filter(([,v])=>v?.done&&!v?.approved).length;
+        if(pendingApprove>0&&h===20&&!sessionStorage.getItem(notifKey('p'))){
+          try{new Notification("משימות המשפחה 🏠",{body:`📋 יש ${pendingApprove} משימות ממתינות לאישור`,icon:"/icon-192.png",dir:"rtl",lang:"he",tag:"chores-approve"});
+            sessionStorage.setItem(notifKey('p'),'1');}catch{}}
+      }
     },60000);return()=>clearInterval(iv);},[user,tasks,completions,streaks]);
 
   // ── Save (granular per-key to Firestore) ──
@@ -500,9 +526,12 @@ export default function App(){
   const updatePin=(uid,np)=>{if(np.length!==4||!/^\d{4}$/.test(np)){flash("⚠️ 4 ספרות");return;}
     const nPins={...pins,[uid]:np};setPins(nPins);const al=logAudit("pin_changed",{uid});save({pins:nPins,auditLog:al});setChangePinUser(null);setNewPinVal("");flash("🔒 עודכן!");};
 
+  // ── Family code ──
+  const familyId=(()=>{try{return JSON.parse(localStorage.getItem('family-chores_family-config')||'{}').familyId||null;}catch{return null;}})();
+
   // ── App object (passed to components) ──
   const app={
-    FAMILY,CH,familyName:FAMILY_NAME,storage,
+    FAMILY,CH,familyName:FAMILY_NAME,storage,familyId,
     user,isP,tasks,completions,cKey,wk,xp,streaks,goals,setGoals,challenges,messages,swaps,
     selDay,setSelDay,screen,setScreen,
     getLevel,getNextLevel,getXpProgress,getWeekStats,getFamilyPct,getTodayPctForChild,
@@ -567,8 +596,11 @@ export default function App(){
 
   // ── Onboarding (first run) ──
   if(!familyConfigured) return <OnboardingScreen onComplete={async(cfg)=>{
-    const configStr=JSON.stringify({family:cfg.family,children:cfg.children,pins:cfg.pins,familyName:cfg.familyName});
+    const familyId=cfg.familyId||generateFamilyCode();
+    const configStr=JSON.stringify({family:cfg.family,children:cfg.children,pins:cfg.pins,familyName:cfg.familyName,familyId});
     localStorage.setItem('family-chores_family-config',configStr);
+    // Set collection path for this family
+    storage.setCollection(`families/${familyId}/data`);
     // Save each key individually (granular for Firestore)
     try{
       await storage.set('family-config',configStr);
@@ -576,7 +608,19 @@ export default function App(){
       for(const[k,v]of Object.entries(d)){await storage.set(k,JSON.stringify(v));}
     }catch(e){console.error('Onboarding save:',e);}
     window.location.reload();
-  }}/>;
+  }} onJoin={async(familyId)=>{
+    // Join existing family: set collection, load config, save locally
+    storage.setCollection(`families/${familyId}/data`);
+    try{
+      const fc=await storage.get('family-config');
+      if(!fc){alert('קוד משפחה לא נמצא');return;}
+      const config=JSON.parse(fc.value);
+      config.familyId=familyId;
+      localStorage.setItem('family-chores_family-config',JSON.stringify(config));
+      localStorage.setItem('family-chores_migrated','true');
+      window.location.reload();
+    }catch(e){console.error('Join error:',e);alert('שגיאה בהצטרפות — בדקו את הקוד');}
+  }} signInWithGoogle={signInWithGoogle}/>;
 
   // ── PIN Screen ──
   if(pinScreen) return <PinScreen pinScreen={pinScreen} pinInput={pinInput} setPinInput={setPinInput}

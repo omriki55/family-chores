@@ -3,14 +3,24 @@
 // ═══════════════════════════════════════════
 // Same async API as storage.js (localStorage)
 // + onDataChange for realtime sync
+// + setCollection for family-specific paths
 // ═══════════════════════════════════════════
 
 import { db } from './firebase.js';
 import { doc, getDoc, setDoc, deleteDoc, collection, getDocs, onSnapshot } from 'firebase/firestore';
 
-const COLLECTION = 'family-chores';
+let COLLECTION = 'family-chores';
 
 const storage = {
+  // Set collection path (e.g., 'families/ABC123/data')
+  setCollection(path) {
+    COLLECTION = path;
+  },
+
+  getCollection() {
+    return COLLECTION;
+  },
+
   async get(key) {
     try {
       const docRef = doc(db, COLLECTION, key);
@@ -57,6 +67,18 @@ const storage = {
     } catch (e) {
       console.error('Firebase list error:', e);
       return { keys: [], prefix };
+    }
+  },
+
+  // Check if a collection exists (for "join family" verification)
+  async exists(collectionPath, docKey) {
+    try {
+      const docRef = doc(db, collectionPath, docKey);
+      const docSnap = await getDoc(docRef);
+      return docSnap.exists();
+    } catch (e) {
+      console.error('Firebase exists error:', e);
+      return false;
     }
   },
 

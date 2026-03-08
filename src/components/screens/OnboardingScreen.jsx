@@ -15,8 +15,11 @@ const btn=(bg='#6366f1',col='#fff')=>({padding:'11px 22px',borderRadius:12,borde
 const chip=(active)=>({padding:'6px 14px',borderRadius:20,border:`1.5px solid ${active?'#6366f1':'#e2e8f0'}`,
   background:active?'#6366f1':'#fff',color:active?'#fff':'#64748b',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'});
 
-export default function OnboardingScreen({onComplete}){
+export default function OnboardingScreen({onComplete,onJoin,signInWithGoogle}){
   const[step,setStep]=useState(0);
+  const[joinMode,setJoinMode]=useState(false);
+  const[joinCode,setJoinCode]=useState('');
+  const[joinLoading,setJoinLoading]=useState(false);
   const[familyName,setFamilyName]=useState('');
   const[numParents,setNumParents]=useState(1);
   const[parents,setParents]=useState([
@@ -158,6 +161,15 @@ export default function OnboardingScreen({onComplete}){
     </div>
   );
 
+  // ── Join handler ──
+  const handleJoin=async()=>{
+    const code=joinCode.trim().toUpperCase();
+    if(code.length!==6){alert('קוד משפחה חייב להיות 6 תווים');return;}
+    setJoinLoading(true);
+    try{await onJoin(code);}catch(e){console.error(e);alert('שגיאה בהצטרפות');}
+    finally{setJoinLoading(false);}
+  };
+
   // ── Step 0: Welcome ──
   if(step===0)return(
     <div style={wrap}>
@@ -171,10 +183,45 @@ export default function OnboardingScreen({onComplete}){
             <span key={f} style={{padding:'4px 10px',background:'#ede9fe',borderRadius:20,fontSize:11,color:'#6366f1',fontWeight:600}}>{f}</span>
           ))}
         </div>
-        <button onClick={next} style={{...btn(),width:'100%',fontSize:15,padding:'13px'}}>
-          נתחיל →
-        </button>
-        <p style={{fontSize:10,color:'#94a3b8',marginTop:10}}>🔒 כל הנתונים נשמרים במכשיר שלכם בלבד</p>
+
+        {!joinMode?(
+          <>
+            <button onClick={next} style={{...btn(),width:'100%',fontSize:15,padding:'13px',marginBottom:10}}>
+              🏠 הגדרת משפחה חדשה →
+            </button>
+            <button onClick={()=>setJoinMode(true)}
+              style={{...btn('#f0fdf4','#16a34a'),width:'100%',fontSize:14,padding:'12px',marginBottom:10,border:'1.5px solid #86efac'}}>
+              🔗 הצטרפות למשפחה קיימת
+            </button>
+            {signInWithGoogle&&(
+              <button onClick={signInWithGoogle}
+                style={{...btn('#fff','#1e293b'),width:'100%',fontSize:13,padding:'11px',border:'1.5px solid #e2e8f0',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+                <span style={{fontSize:18}}>G</span> התחבר עם Google
+              </button>
+            )}
+          </>
+        ):(
+          <div style={{textAlign:'right'}}>
+            <p style={{fontSize:13,color:'#1e293b',fontWeight:700,marginBottom:8,textAlign:'center'}}>🔗 הצטרפות למשפחה קיימת</p>
+            <p style={{fontSize:11,color:'#64748b',marginBottom:12,textAlign:'center',lineHeight:1.5}}>
+              בקשו מהורה במשפחה את קוד השיתוף בן 6 התווים
+            </p>
+            <input value={joinCode} onChange={e=>setJoinCode(e.target.value.toUpperCase().slice(0,6))}
+              placeholder="XXXXXX" maxLength={6}
+              style={{...inp,textAlign:'center',letterSpacing:6,fontSize:20,fontWeight:700,fontFamily:'monospace',marginBottom:12}}/>
+            <button onClick={handleJoin} disabled={joinLoading||joinCode.trim().length!==6}
+              style={{...btn('#10b981'),width:'100%',fontSize:14,padding:'12px',marginBottom:8,
+                opacity:joinLoading||joinCode.trim().length!==6?0.5:1}}>
+              {joinLoading?'⏳ מתחבר...':'✅ הצטרף'}
+            </button>
+            <button onClick={()=>{setJoinMode(false);setJoinCode('');}}
+              style={{...btn('#f1f5f9','#64748b'),width:'100%',fontSize:12,padding:'10px'}}>
+              ← חזרה
+            </button>
+          </div>
+        )}
+
+        <p style={{fontSize:10,color:'#94a3b8',marginTop:10}}>🔒 כל הנתונים מסונכרנים בין מכשירי המשפחה</p>
       </div>
     </div>
   );
