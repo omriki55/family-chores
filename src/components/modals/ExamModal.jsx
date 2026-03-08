@@ -7,7 +7,7 @@ export default function ExamModal({ S, app }) {
 
   return (
     <div style={S.ov} onClick={() => { setExamModal(null); setExamScore(""); }}>
-      <div style={S.md} onClick={e => e.stopPropagation()}>
+      <div style={S.md} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="הוספת ציון מבחן">
         <h3 style={S.mt}>📝 דיווח ציון מבחן</h3>
         {examModal === true ? (
           <>{/* Select child */}

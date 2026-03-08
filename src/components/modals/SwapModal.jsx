@@ -7,7 +7,7 @@ export default function SwapModal({ S, app }) {
 
   return (
     <div style={S.ov} onClick={() => setSwapModal(null)}>
-      <div style={S.md} onClick={e => e.stopPropagation()}>
+      <div style={S.md} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="בקשת החלפה">
         <h3 style={S.mt}>🔄 החלף משימה</h3>
         <p style={{ color: "var(--textSec)", fontSize: 11, textAlign: "center", margin: "0 0 10px" }}>בחר/י למי להעביר את המשימה:</p>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>

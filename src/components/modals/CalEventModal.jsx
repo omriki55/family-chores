@@ -6,7 +6,7 @@ export default function CalEventModal({ S, app }) {
 
   return (
     <div style={S.ov} onClick={() => setCalEventModal(false)}>
-      <div style={S.md} onClick={e => e.stopPropagation()}>
+      <div style={S.md} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="הוספת אירוע">
         <h3 style={S.mt}>📅 אירוע חדש — {calEventModal.date}</h3>
         <input style={S.inp} placeholder="שם האירוע..." value={calNewEvent.title}
           onChange={e => setCalNewEvent(p => ({ ...p, title: e.target.value }))} />

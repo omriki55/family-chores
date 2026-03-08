@@ -1,31 +1,12 @@
 // ═══════════════════════════════════════════
 // Storage Layer - Firebase Firestore
 // ═══════════════════════════════════════════
-// סנכרון בזמן אמת בין כל המכשירים!
-//
-// שלבים להפעלה:
-// 1. npm install firebase
-// 2. צור פרויקט ב-console.firebase.google.com
-// 3. הפעל Firestore Database (test mode)
-// 4. העתק את הקונפיגורציה שלך למטה
-// 5. שנה את שם הקובץ הזה ל-storage.js
+// Same async API as storage.js (localStorage)
+// + onDataChange for realtime sync
 // ═══════════════════════════════════════════
 
-import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs, query, where, onSnapshot } from 'firebase/firestore';
-
-// ⬇️ הדבק כאן את הקונפיגורציה מ-Firebase Console:
-const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+import { db } from './firebase.js';
+import { doc, getDoc, setDoc, deleteDoc, collection, getDocs, onSnapshot } from 'firebase/firestore';
 
 const COLLECTION = 'family-chores';
 
@@ -69,8 +50,8 @@ const storage = {
       const colRef = collection(db, COLLECTION);
       const snapshot = await getDocs(colRef);
       const keys = [];
-      snapshot.forEach(doc => {
-        if (doc.id.startsWith(prefix)) keys.push(doc.id);
+      snapshot.forEach(d => {
+        if (d.id.startsWith(prefix)) keys.push(d.id);
       });
       return { keys, prefix };
     } catch (e) {
@@ -79,15 +60,15 @@ const storage = {
     }
   },
 
-  // ⭐ בונוס: האזנה לשינויים בזמן אמת
-  // קרא לזה כדי לקבל עדכונים אוטומטיים:
-  // storage.onDataChange('chores-v5', (newData) => { ... })
+  // Realtime listener — returns unsubscribe function
   onDataChange(key, callback) {
     const docRef = doc(db, COLLECTION, key);
     return onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         callback(docSnap.data().value);
       }
+    }, (err) => {
+      console.error('Firebase onDataChange error:', err);
     });
   }
 };

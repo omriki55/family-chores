@@ -6,7 +6,7 @@ export default function DoneConfirmModal({ S, app }) {
 
   return (
     <div style={S.ov} onClick={() => setDoneConfirm(null)}>
-      <div style={S.md} onClick={e => e.stopPropagation()}>
+      <div style={S.md} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="אישור ביצוע">
         <h3 style={S.mt}>✅ סיום משימה</h3>
         <p style={{ color: "var(--textTer)", fontSize: 12, textAlign: "center", margin: "0 0 12px" }}>רוצה להוסיף תמונה?</p>
         <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }}

@@ -6,7 +6,7 @@ export default function BonusModal({ S, app }) {
 
   return (
     <div style={S.ov} onClick={() => setBonusModal(false)}>
-      <div style={S.md} onClick={e => e.stopPropagation()}>
+      <div style={S.md} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="הגשת יוזמה">
         <h3 style={S.mt}>⭐ יוזמה</h3>
         <input style={S.inp} placeholder="מה עשית?" value={bonusTitle} onChange={e => setBonusTitle(e.target.value)} />
         <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 8 }}>

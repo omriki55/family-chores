@@ -1,17 +1,35 @@
 import { FAMILY, CH, DS, DEFAULT_BADGES } from '../../constants.js';
+import XPBarChart from '../charts/XPBarChart.jsx';
+import WeeklyProgressChart from '../charts/WeeklyProgressChart.jsx';
+import TaskPieChart from '../charts/TaskPieChart.jsx';
 
 export default function DashboardScreen({ S, app }) {
   const {
-    tasks, completions, streaks, exams, earnedBadges,
+    tasks, completions, streaks, exams, earnedBadges, cKey, wk,
     getWeekCompletionCount, getLeadingChild, getFamilyStreak, getWeekXpTotal,
-    getWeekStats, getHeatmapData, getRecentAchievements,
-    setShowSummaryModal, setWeeklySummaryData,
+    getWeekStats, getHeatmapData, getRecentAchievements, getWeeklyXpData,
+    setShowSummaryModal, setWeeklySummaryData, isTaskForChild,
   } = app;
 
   const wc=getWeekCompletionCount();const wcPct=wc.total>0?Math.round((wc.done/wc.total)*100):0;
   const leading=getLeadingChild();const famStreak=getFamilyStreak();const weekXp=getWeekXpTotal();
   const heatmap=getHeatmapData();const heatMax=Math.max(1,...heatmap.flat());
   const achievements=getRecentAchievements();
+  const xpData=getWeeklyXpData();
+
+  // Daily completion % per child (for line chart)
+  const dailyData={};
+  CH.forEach(cid=>{dailyData[cid]=[];
+    for(let d=0;d<7;d++){const dt=tasks.filter(t=>isTaskForChild(t,cid,d)&&!t.bonus);
+      const done=dt.filter(t=>completions[cKey(t.id,cid,d)]?.done).length;
+      dailyData[cid].push(dt.length>0?Math.round((done/dt.length)*100):0);}});
+
+  // Task type distribution (for pie chart)
+  const pieData=[
+    {label:"אישי",value:tasks.filter(t=>!t.bonus&&t.type!=="shared").length,color:"#6366f1"},
+    {label:"רוטציה",value:tasks.filter(t=>!t.bonus&&t.type==="shared").length,color:"#10b981"},
+    {label:"יוזמות",value:tasks.filter(t=>t.bonus).length,color:"#f59e0b"},
+  ];
 
   return (
     <>
@@ -45,6 +63,24 @@ export default function DashboardScreen({ S, app }) {
           <div style={S.rpBig}>{weekXp}</div>
           <div style={{fontSize:11,color:"#7c3aed",fontWeight:700}}>XP</div>
           <div style={S.rpLabel}>נקודות חולקו השבוע</div>
+        </div>
+      </div>
+
+      {/* SVG Charts */}
+      <div style={S.rpSection}>
+        <div style={S.rpSt}>📈 התקדמות שבועית</div>
+        <p style={{fontSize:9,color:"var(--textSec)",margin:"0 0 6px"}}>אחוז ביצוע יומי לכל ילד</p>
+        <WeeklyProgressChart dailyData={dailyData} DS={DS} FAMILY={FAMILY} CH={CH}/>
+      </div>
+
+      <div style={{display:"flex",gap:8}}>
+        <div style={{...S.rpSection,flex:1}}>
+          <div style={S.rpSt}>🏆 XP השבוע</div>
+          <XPBarChart data={xpData} FAMILY={FAMILY} CH={CH}/>
+        </div>
+        <div style={{...S.rpSection,flex:1}}>
+          <div style={S.rpSt}>📋 סוגי משימות</div>
+          <TaskPieChart data={pieData}/>
         </div>
       </div>
 

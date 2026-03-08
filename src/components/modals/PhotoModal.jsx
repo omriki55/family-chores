@@ -6,7 +6,7 @@ export default function PhotoModal({ S, app }) {
 
   return (
     <div style={S.ov} onClick={() => setPhotoModal(null)}>
-      <div style={S.md} onClick={e => e.stopPropagation()}>
+      <div style={S.md} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="צפייה בתמונה">
         {photoModal.view ? <>
           <img src={photoModal.view} alt="" style={{ width: "100%", borderRadius: 10, marginBottom: 10, maxHeight: 240, objectFit: "cover" }} />
           <button onClick={() => setPhotoModal(null)} style={S.mc}>סגור</button>

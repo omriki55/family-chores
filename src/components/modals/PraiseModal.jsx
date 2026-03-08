@@ -7,7 +7,7 @@ export default function PraiseModal({ S, app }) {
 
   return (
     <div style={S.ov} onClick={() => setPraiseModal(null)}>
-      <div style={S.md} onClick={e => e.stopPropagation()}>
+      <div style={S.md} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="שליחת שבח">
         <h3 style={S.mt}>{praiseStar || "👍"} שבח ל{FAMILY[praiseModal.childId]?.name}</h3>
         <p style={{ color: "var(--textTer)", fontSize: 11, textAlign: "center", margin: "0 0 10px" }}>
           {tasks.find(t => t.id === praiseModal.taskId)?.icon} {tasks.find(t => t.id === praiseModal.taskId)?.title}

@@ -7,7 +7,7 @@ export default function PenaltyModal({ S, app }) {
 
   return (
     <div style={S.ov} onClick={() => setPenaltyModal(null)}>
-      <div style={S.md} onClick={e => e.stopPropagation()}>
+      <div style={S.md} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="הפחתת נקודות">
         <h3 style={S.mt}>⚠️ הורדת נקודות - {FAMILY[penaltyModal.childId]?.name}</h3>
         <p style={{ color: "var(--textTer)", fontSize: 11, textAlign: "center", margin: "0 0 10px" }}>בחר/י סיבה:</p>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>

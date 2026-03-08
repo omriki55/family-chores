@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { HDate, HebrewCalendar, flags } from '@hebcal/core';
-import storage from "./storage.js";
+import storage from "./storage.firebase.js";
+import { migrateToFirestore } from "./migration.js";
 import S from "./styles.js";
 import { FAMILY, CH, FAMILY_NAME, DAYS, DS, DEFAULT_PINS, LEVELS, REMINDERS, PENALTIES, DEFAULT_BADGES, EXAM_BONUSES,
   INIT_TASKS, DEFAULT_GOALS, GROCERY_CATEGORIES, DEFAULT_CHALLENGES } from "./constants.js";
 import { compressImage, getWk, getToday, getHour, getTimeStr, dateKey, getWkForDate } from "./utils.js";
+import { isTaskForChild as _isTaskForChild, getLevel as _getLevel, getNextLevel as _getNextLevel, getXpProgress as _getXpProgress, getNewBadges } from "./logic.js";
 // Animations
 import Confetti from "./components/animations/Confetti.jsx";
 import LevelUp from "./components/animations/LevelUp.jsx";
@@ -51,7 +53,7 @@ export default function App(){
   const[manageSub,setManageSub]=useState("tasks");
   const[editTask,setEditTask]=useState(null);
   const[weightEdit,setWeightEdit]=useState(null);
-  const[newTask,setNewTask]=useState({title:"",icon:"✨",weight:5,assignedTo:[],type:"personal",requirePhoto:false});
+  const[newTask,setNewTask]=useState({title:"",icon:"✨",weight:5,assignedTo:[],type:"personal",requirePhoto:false,activeDays:null});
   const[notifChild,setNotifChild]=useState(null);
   const[bonusModal,setBonusModal]=useState(false);
   const[bonusTitle,setBonusTitle]=useState("");
@@ -108,21 +110,46 @@ export default function App(){
   const bonusFileRef=useRef(null);
   const wk=getWk();
 
-  // ── Load ──
-  useEffect(()=>{(async()=>{try{const s=await storage.get("chores-v5");if(s){const d=JSON.parse(s.value);
-    if(d.tasks)setTasks(d.tasks);if(d.completions)setCompletions(d.completions);if(d.pins)setPins(d.pins);
-    if(d.xp)setXp(d.xp);if(d.streaks)setStreaks(d.streaks);if(d.goals)setGoals(d.goals);
-    if(d.swaps)setSwaps(d.swaps);if(d.activeReminders)setActiveReminders(d.activeReminders);
-    if(d.messages)setMessages(d.messages.map(m=>({...m,type:m.type||"praise",reactions:m.reactions||{}})));if(d.penalties)setPenalties(d.penalties);
-    if(d.earnedBadges){const migrated={};Object.keys(d.earnedBadges).forEach(cid=>{migrated[cid]=(d.earnedBadges[cid]||[]).map(b=>typeof b==='string'?{id:b,ts:0}:b);});setEarnedBadges(migrated);}if(d.totalXpEarned)setTotalXpEarned(d.totalXpEarned);
-    if(d.approvedCount)setApprovedCount(d.approvedCount);if(d.exams)setExams(d.exams);
-    if(d.calEvents)setCalEvents(d.calEvents);
-    if(d.groceries)setGroceries(d.groceries);
-    if(d.auditLog)setAuditLog(d.auditLog);
-    if(d.challenges)setChallenges(d.challenges);
-    if(d.lastSummaryWeek)setLastSummaryWeek(d.lastSummaryWeek);
-    if(d.locations)setLocations(d.locations);
-  }}catch{}})();},[]);
+  // ── Load (granular per-key from Firestore) ──
+  useEffect(()=>{(async()=>{try{
+    await migrateToFirestore();
+    const lk=async(k)=>{const s=await storage.get(k);return s?JSON.parse(s.value):null;};
+    const d_tasks=await lk('tasks');if(d_tasks)setTasks(d_tasks);
+    const d_comp=await lk('completions');if(d_comp)setCompletions(d_comp);
+    const d_pins=await lk('pins');if(d_pins)setPins(d_pins);
+    const d_xp=await lk('xp');if(d_xp)setXp(d_xp);
+    const d_str=await lk('streaks');if(d_str)setStreaks(d_str);
+    const d_goals=await lk('goals');if(d_goals)setGoals(d_goals);
+    const d_swaps=await lk('swaps');if(d_swaps)setSwaps(d_swaps);
+    const d_ar=await lk('activeReminders');if(d_ar)setActiveReminders(d_ar);
+    const d_msg=await lk('messages');if(d_msg)setMessages(d_msg.map(m=>({...m,type:m.type||"praise",reactions:m.reactions||{}})));
+    const d_pen=await lk('penalties');if(d_pen)setPenalties(d_pen);
+    const d_eb=await lk('earnedBadges');if(d_eb){const migrated={};Object.keys(d_eb).forEach(cid=>{migrated[cid]=(d_eb[cid]||[]).map(b=>typeof b==='string'?{id:b,ts:0}:b);});setEarnedBadges(migrated);}
+    const d_txp=await lk('totalXpEarned');if(d_txp)setTotalXpEarned(d_txp);
+    const d_ac=await lk('approvedCount');if(d_ac)setApprovedCount(d_ac);
+    const d_ex=await lk('exams');if(d_ex)setExams(d_ex);
+    const d_ce=await lk('calEvents');if(d_ce)setCalEvents(d_ce);
+    const d_gr=await lk('groceries');if(d_gr)setGroceries(d_gr);
+    const d_al=await lk('auditLog');if(d_al)setAuditLog(d_al);
+    const d_ch=await lk('challenges');if(d_ch)setChallenges(d_ch);
+    const d_lsw=await lk('lastSummaryWeek');if(d_lsw)setLastSummaryWeek(d_lsw);
+    const d_loc=await lk('locations');if(d_loc)setLocations(d_loc);
+  }catch(e){console.error('Load error:',e);}})();},[]);
+
+  // ── Realtime sync (listen for changes from other devices) ──
+  useEffect(()=>{
+    if(!storage.onDataChange)return;
+    const unsubs=[
+      storage.onDataChange('completions',(v)=>{try{setCompletions(JSON.parse(v));}catch{}}),
+      storage.onDataChange('tasks',(v)=>{try{setTasks(JSON.parse(v));}catch{}}),
+      storage.onDataChange('messages',(v)=>{try{setMessages(JSON.parse(v).map(m=>({...m,type:m.type||"praise",reactions:m.reactions||{}})));}catch{}}),
+      storage.onDataChange('locations',(v)=>{try{setLocations(JSON.parse(v));}catch{}}),
+      storage.onDataChange('groceries',(v)=>{try{setGroceries(JSON.parse(v));}catch{}}),
+      storage.onDataChange('xp',(v)=>{try{setXp(JSON.parse(v));}catch{}}),
+      storage.onDataChange('streaks',(v)=>{try{setStreaks(JSON.parse(v));}catch{}}),
+    ];
+    return()=>unsubs.forEach(u=>u&&u());
+  },[]);
 
   useEffect(()=>{if(user&&challenges.filter(c=>c.week===wk).length===0){const nc=initWeeklyChallenges();if(nc)save({challenges:nc});}},[user]);
 
@@ -148,18 +175,11 @@ export default function App(){
         try{new Notification("משימות המשפחה",{body:`יש לך ${pending} משימות ממתינות${(streaks[user]||0)>0?" • הסטריק שלך בסכנה! 🔥":""}`,icon:"/icon-192.png"});}catch{}}
     },60000);return()=>clearInterval(iv);},[user,tasks,completions,streaks]);
 
-  // ── Save ──
-  const save=useCallback(async(overrides={})=>{try{await storage.set("chores-v5",JSON.stringify({
-    tasks:overrides.tasks||tasks,completions:overrides.completions||completions,pins:overrides.pins||pins,
-    xp:overrides.xp||xp,streaks:overrides.streaks||streaks,goals:overrides.goals||goals,
-    swaps:overrides.swaps||swaps,activeReminders:overrides.activeReminders||activeReminders,
-    messages:overrides.messages||messages,penalties:overrides.penalties||penalties,
-    earnedBadges:overrides.earnedBadges||earnedBadges,totalXpEarned:overrides.totalXpEarned||totalXpEarned,
-    approvedCount:overrides.approvedCount||approvedCount,exams:overrides.exams||exams,
-    calEvents:overrides.calEvents||calEvents,groceries:overrides.groceries||groceries,
-    auditLog:overrides.auditLog||auditLog,challenges:overrides.challenges||challenges,lastSummaryWeek:overrides.lastSummaryWeek||lastSummaryWeek,
-    locations:overrides.locations||locations,
-  }));}catch{}},[tasks,completions,pins,xp,streaks,goals,swaps,activeReminders,messages,penalties,earnedBadges,totalXpEarned,approvedCount,exams,calEvents,groceries,auditLog,challenges,lastSummaryWeek,locations]);
+  // ── Save (granular per-key to Firestore) ──
+  const save=useCallback(async(overrides={})=>{try{
+    const ps=Object.entries(overrides).map(([k,v])=>storage.set(k,JSON.stringify(v)));
+    await Promise.all(ps);
+  }catch(e){console.error('Save error:',e);}},[]);
 
   // ── Helpers ──
   const flash=(m)=>{setToast(m);setTimeout(()=>setToast(null),2200);};
@@ -168,12 +188,7 @@ export default function App(){
   const cKey=(tid,cid,day)=>`${wk}_${tid}_${cid}_${day}`;
   const isP=user&&FAMILY[user]?.role==="parent";
 
-  const isTaskForChild=(task,cid,day)=>{
-    if(!task.assignedTo.includes(cid))return false;
-    if(task.bonus)return true;
-    if(task.type==="shared"){const kids=task.assignedTo;return kids[(typeof day==="number"?day:new Date(day).getDay())%kids.length]===cid;}
-    return true;
-  };
+  const isTaskForChild=(task,cid,day)=>_isTaskForChild(task,cid,day);
   const getChildW=(cid)=>tasks.filter(t=>isTaskForChild(t,cid,selDay)&&!t.bonus).reduce((s,t)=>s+t.weight,0);
 
   // ── Calendar helpers ──
@@ -209,10 +224,9 @@ export default function App(){
   const deleteCalEvent=(evId)=>{const ne=calEvents.filter(e=>e.id!==evId);const al=logAudit("cal_event_deleted",{evId});setCalEvents(ne);save({calEvents:ne,auditLog:al});flash("🗑️");};
 
   // ── XP & Levels ──
-  const getLevel=(cid)=>{const x=xp[cid]||0;let lv=LEVELS[0];for(const l of LEVELS)if(x>=l.min)lv=l;return lv;};
-  const getNextLevel=(cid)=>{const x=xp[cid]||0;for(const l of LEVELS)if(x<l.min)return l;return null;};
-  const getXpProgress=(cid)=>{const x=xp[cid]||0;const cur=getLevel(cid);const nxt=getNextLevel(cid);
-    if(!nxt)return 100;return Math.round(((x-cur.min)/(nxt.min-cur.min))*100);};
+  const getLevel=(cid)=>_getLevel(xp[cid]||0, LEVELS);
+  const getNextLevel=(cid)=>_getNextLevel(xp[cid]||0, LEVELS);
+  const getXpProgress=(cid)=>_getXpProgress(xp[cid]||0, LEVELS);
 
   const addXp=(cid,amount)=>{
     const oldLv=getLevel(cid);
@@ -369,7 +383,7 @@ export default function App(){
   const addNewTask=()=>{if(!newTask.title||newTask.assignedTo.length===0){flash("⚠️ חסרים פרטים");return;}
     const nt=[...tasks,{...newTask,id:"t"+Date.now(),bonus:false,type:newTask.type||"personal"}];setTasks(nt);
     const al=logAudit("task_created",{title:newTask.title});save({tasks:nt,auditLog:al});
-    setNewTask({title:"",icon:"✨",weight:5,assignedTo:[],type:"personal",requirePhoto:false});flash("✨ נוספה!");};
+    setNewTask({title:"",icon:"✨",weight:5,assignedTo:[],type:"personal",requirePhoto:false,activeDays:null});flash("✨ נוספה!");};
   const addSuggested=(s)=>{if(tasks.find(t=>t.title===s.title)){flash("⚠️ קיימת");return;}
     const nt=[...tasks,{id:"t"+Date.now(),title:s.title,icon:s.icon,weight:s.weight,assignedTo:[...CH],bonus:false,type:"personal"}];
     setTasks(nt);save({tasks:nt});flash(`✨ ${s.title} נוספה!`);};
@@ -488,7 +502,7 @@ export default function App(){
 
   // ── App object (passed to components) ──
   const app={
-    FAMILY,CH,familyName:FAMILY_NAME,
+    FAMILY,CH,familyName:FAMILY_NAME,storage,
     user,isP,tasks,completions,cKey,wk,xp,streaks,goals,setGoals,challenges,messages,swaps,
     selDay,setSelDay,screen,setScreen,
     getLevel,getNextLevel,getXpProgress,getWeekStats,getFamilyPct,getTodayPctForChild,
@@ -552,11 +566,15 @@ export default function App(){
   };
 
   // ── Onboarding (first run) ──
-  if(!familyConfigured) return <OnboardingScreen onComplete={(cfg)=>{
-    localStorage.setItem('family-chores_family-config',JSON.stringify({
-      family:cfg.family,children:cfg.children,pins:cfg.pins,familyName:cfg.familyName
-    }));
-    localStorage.setItem('family-chores_chores-v5',JSON.stringify(cfg.initialData));
+  if(!familyConfigured) return <OnboardingScreen onComplete={async(cfg)=>{
+    const configStr=JSON.stringify({family:cfg.family,children:cfg.children,pins:cfg.pins,familyName:cfg.familyName});
+    localStorage.setItem('family-chores_family-config',configStr);
+    // Save each key individually (granular for Firestore)
+    try{
+      await storage.set('family-config',configStr);
+      const d=cfg.initialData;
+      for(const[k,v]of Object.entries(d)){await storage.set(k,JSON.stringify(v));}
+    }catch(e){console.error('Onboarding save:',e);}
     window.location.reload();
   }}/>;
 
@@ -566,7 +584,7 @@ export default function App(){
 
   // ── Login Screen ──
   const handleReset=()=>{if(confirm('האם לאפס את הגדרות המשפחה? כל הנתונים יימחקו!')){
-    localStorage.removeItem('family-chores_family-config');localStorage.removeItem('family-chores_chores-v5');window.location.reload();}};
+    localStorage.removeItem('family-chores_family-config');localStorage.removeItem('family-chores_chores-v5');localStorage.removeItem('family-chores_migrated');window.location.reload();}};
   if(screen==="login") return <LoginScreen S={S}
     getLevel={getLevel} setPinScreen={setPinScreen} setPinInput={setPinInput} setPinError={setPinError} onReset={handleReset}/>;
 
@@ -582,16 +600,17 @@ export default function App(){
         @keyframes listIn{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:translateX(0)}}
         @keyframes cardPop{from{opacity:0;transform:scale(0.96)}to{opacity:1;transform:scale(1)}}
         @keyframes toastSlide{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+        *:focus-visible{outline:2px solid #6366f1;outline-offset:2px;border-radius:4px;}
       `}</style>
       <Confetti show={showConfetti}/>
       <LevelUp show={!!levelUpInfo} level={levelUpInfo}/>
       <BadgeEarned show={!!badgeNotification} badge={badgeNotification?.badge}/>
-      {toast&&<div style={S.toast}>{toast}</div>}
+      {toast&&<div style={S.toast} role="status" aria-live="polite">{toast}</div>}
 
       {/* HEADER */}
       <div style={S.header}>
         <div style={S.hTop}>
-          <button onClick={()=>{setScreen("login");setUser(null);}} style={S.backBtn}>🔒</button>
+          <button onClick={()=>{setScreen("login");setUser(null);}} style={S.backBtn} aria-label="נעילה — חזרה למסך כניסה">🔒</button>
           <div style={{flex:1}}>
             <div style={{fontSize:14,fontWeight:700,color:"var(--text)"}}>{me.name} {!isP&&getLevel(user)?.emoji}</div>
             <div style={{fontSize:9,color:"#6366f1"}}>{isP?"מנהל/ת":me.weeklyPay>0?`${me.weeklyPay}₪/שבוע`:getLevel(user)?.name}</div>
@@ -601,14 +620,15 @@ export default function App(){
       </div>
 
       {/* TABS */}
-      <div style={S.tabs}>
+      <div style={S.tabs} role="tablist" aria-label="ניווט ראשי">
         {(()=>{const wallUnread=messages.filter(m=>(m.to==="wall"||m.to===user)&&m.from!==user&&(Date.now()-m.ts)<86400000).length;
+        const tabNames={home:"בית",wall:"הודעות",cal:"לוח שנה",meal:"ארוחות",grocery:"קניות",tasks:"משימות",badges:"הישגים",dash:"דוחות",approve:"אישורים",manage:"הגדרות",counselor:"יועץ"};
         return[
           {id:"home",l:"🏠"},{id:"wall",l:"💬",badge:wallUnread},{id:"cal",l:"📅"},{id:"meal",l:"🍽️"},{id:"grocery",l:"🛒"},{id:"tasks",l:"📋"},
           ...(!isP?[{id:"badges",l:"🏅"}]:[]),
           ...(isP?[{id:"dash",l:"📊"},{id:"approve",l:"✅"},{id:"manage",l:"⚙️"},{id:"counselor",l:"💡"}]:[]),
-        ].map(t=><button key={t.id} onClick={()=>setScreen(t.id)}
-          style={{...S.tab,...(screen===t.id?S.tabA:{}),position:"relative"}}>{t.l}{t.badge>0&&<span style={{position:"absolute",top:2,right:2,width:8,height:8,borderRadius:4,background:"#ef4444"}}/>}</button>);})()}
+        ].map(t=><button key={t.id} onClick={()=>setScreen(t.id)} role="tab" aria-selected={screen===t.id} aria-label={tabNames[t.id]||t.id}
+          style={{...S.tab,...(screen===t.id?S.tabA:{}),position:"relative"}}><span aria-hidden="true">{t.l}</span>{t.badge>0&&<span style={{position:"absolute",top:2,right:2,width:8,height:8,borderRadius:4,background:"#ef4444"}} aria-label={`${t.badge} הודעות חדשות`}/>}</button>);})()}
       </div>
 
       <div style={S.content}>

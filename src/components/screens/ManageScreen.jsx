@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { FAMILY, CH, SUGGESTED, REMINDERS, AUDIT_LABELS } from '../../constants.js';
+import { useState, useRef } from 'react';
+import { FAMILY, CH, SUGGESTED, REMINDERS, AUDIT_LABELS, DS } from '../../constants.js';
 
 const CONTEXT_REMINDER_PRESETS = [
   {icon:"⚽",text:"אל תשכח ציוד לכדורגל!"},
@@ -25,16 +25,69 @@ export default function ManageScreen({ S, app }) {
     changePinUser, setChangePinUser, newPinVal, setNewPinVal,
     dragIdx, setDragIdx, dragOverIdx, setDragOverIdx,
     updateTask, deleteTask, changeWeight, reorderTasks, addNewTask, addSuggested,
-    updatePin, save, flash,
+    updatePin, save, flash, storage,
   } = app;
   const saveContextReminders = (r) => { setContextReminders(r); localStorage.setItem('family-context-reminders', JSON.stringify(r)); };
+  const importFileRef = useRef(null);
+  const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const result = await storage.list();
+      const data = {};
+      for (const key of result.keys) {
+        const item = await storage.get(key);
+        if (item) { try { data[key] = JSON.parse(item.value); } catch { data[key] = item.value; } }
+      }
+      const cr = localStorage.getItem('family-context-reminders');
+      if (cr) { try { data['context-reminders'] = JSON.parse(cr); } catch {} }
+      const fc = localStorage.getItem('family-chores_family-config');
+      if (fc) { try { data['_familyConfig'] = JSON.parse(fc); } catch { data['_familyConfig'] = fc; } }
+      const exportObj = { _version: 1, _exportDate: new Date().toISOString(), _app: 'family-chores', ...data };
+      const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `family-chores-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      flash('💾 הגיבוי הורד בהצלחה!');
+    } catch (e) { console.error('Export error:', e); flash('❌ שגיאה בייצוא'); }
+    setExporting(false);
+  };
+
+  const handleImport = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const d = JSON.parse(text);
+      if (d._app !== 'family-chores') { flash('❌ קובץ לא תקין'); setImporting(false); return; }
+      if (d._familyConfig) {
+        localStorage.setItem('family-chores_family-config', typeof d._familyConfig === 'string' ? d._familyConfig : JSON.stringify(d._familyConfig));
+      }
+      const skip = ['_version', '_exportDate', '_app', '_familyConfig'];
+      for (const [key, value] of Object.entries(d)) {
+        if (skip.includes(key)) continue;
+        if (key === 'context-reminders') { localStorage.setItem('family-context-reminders', JSON.stringify(value)); continue; }
+        await storage.set(key, JSON.stringify(value));
+      }
+      flash('✅ ייבוא הושלם! טוען מחדש...');
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (e) { console.error('Import error:', e); flash('❌ קובץ לא תקין'); }
+    setImporting(false);
+    e.target.value = '';
+  };
 
   return (
     <>
-      <div style={{display:"flex",gap:3,marginBottom:12,overflowX:"auto",paddingBottom:2}}>
-        {[{id:"tasks",l:"📋"},{id:"add",l:"➕"},{id:"suggest",l:"💡"},{id:"weights",l:"⚖️"},{id:"goals",l:"🎯"},{id:"reminders",l:"⏰"},{id:"pins",l:"🔒"},{id:"log",l:"📜"}].map(t=>(
-          <button key={t.id} onClick={()=>setManageSub(t.id)}
-            style={{...S.subT,...(manageSub===t.id?{background:"#6366f1",color:"#fff"}:{})}}>{t.l}</button>
+      <div style={{display:"flex",gap:3,marginBottom:12,overflowX:"auto",paddingBottom:2}} role="tablist" aria-label="הגדרות">
+        {[{id:"tasks",l:"📋",a:"משימות"},{id:"add",l:"➕",a:"הוספה"},{id:"suggest",l:"💡",a:"הצעות"},{id:"weights",l:"⚖️",a:"משקלות"},{id:"goals",l:"🎯",a:"יעדים"},{id:"reminders",l:"⏰",a:"תזכורות"},{id:"pins",l:"🔒",a:"קודים"},{id:"log",l:"📜",a:"יומן"},{id:"data",l:"💾",a:"גיבוי"}].map(t=>(
+          <button key={t.id} onClick={()=>setManageSub(t.id)} role="tab" aria-selected={manageSub===t.id} aria-label={t.a}
+            style={{...S.subT,...(manageSub===t.id?{background:"#6366f1",color:"#fff"}:{})}}><span aria-hidden="true">{t.l}</span></button>
         ))}
       </div>
 
@@ -62,6 +115,15 @@ export default function ManageScreen({ S, app }) {
                 <button onClick={()=>updateTask(t.id,{requirePhoto:!t.requirePhoto})}
                   style={{...S.chip,...(t.requirePhoto?{borderColor:"#6366f1",background:"#6366f120",color:"#6366f1"}:{})}}>📷 חובה תמונה</button>
               </div>
+              <div style={{marginBottom:6}}>
+                <div style={{fontSize:9,color:"var(--textSec)",marginBottom:3}}>ימים פעילים (ריק = כל יום):</div>
+                <div style={{display:"flex",gap:3}}>
+                  {DS.map((d,i)=>{const active=t.activeDays?t.activeDays.includes(i):false;return(
+                    <button key={i} onClick={()=>{const cur=t.activeDays||[];const nd=active?cur.filter(x=>x!==i):[...cur,i];updateTask(t.id,{activeDays:nd.length===0||nd.length===7?null:nd.sort()});}}
+                      style={{width:28,height:28,fontSize:10,fontWeight:700,borderRadius:7,cursor:"pointer",border:active?"2px solid #6366f1":"1px solid var(--border)",background:active?"#6366f120":"var(--barBg)",color:active?"#6366f1":"var(--textTer)"}}>{d}</button>
+                  );})}
+                </div>
+              </div>
               <button onClick={()=>{setEditTask(null);save();flash("💾");}} style={{padding:"6px 14px",background:"#10b981",border:"none",borderRadius:7,color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>💾</button>
             </div>
           ):(
@@ -69,9 +131,9 @@ export default function ManageScreen({ S, app }) {
               <span style={{fontSize:14,cursor:"grab",color:"var(--textSec)",userSelect:"none"}}>⠿</span>
               <span style={{fontSize:16}}>{t.icon}</span>
               <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:"var(--text)"}}>{t.title}</div>
-                <div style={{fontSize:9,color:"var(--textTer)"}}>{t.weight}נק׳ • {t.assignedTo.map(c=>FAMILY[c]?.name).join(", ")} {t.type==="shared"?"• 📋 רוטציה":""}</div></div>
-              <button onClick={()=>setEditTask(t.id)} style={S.eBtn}>✏️</button>
-              <button onClick={()=>deleteTask(t.id)} style={S.dBtn}>🗑</button>
+                <div style={{fontSize:9,color:"var(--textTer)"}}>{t.weight}נק׳ • {t.assignedTo.map(c=>FAMILY[c]?.name).join(", ")} {t.type==="shared"?"• 📋 רוטציה":""}{t.activeDays?` • 📅 ${t.activeDays.map(d=>DS[d]).join(",")}`:""}</div></div>
+              <button onClick={()=>setEditTask(t.id)} style={S.eBtn} aria-label={`עריכת ${t.title}`}>✏️</button>
+              <button onClick={()=>deleteTask(t.id)} style={S.dBtn} aria-label={`מחיקת ${t.title}`}>🗑</button>
             </div>
           )}
         </div>
@@ -104,6 +166,15 @@ export default function ManageScreen({ S, app }) {
           </div>
           <button onClick={()=>setNewTask({...newTask,requirePhoto:!newTask.requirePhoto})}
             style={{...S.chip,...(newTask.requirePhoto?{borderColor:"#6366f1",background:"#6366f120",color:"#6366f1"}:{}),marginBottom:10}}>📷 חובה תמונה</button>
+          <div style={{marginBottom:10}}>
+            <div style={{fontSize:10,color:"var(--textSec)",marginBottom:4}}>📅 ימים פעילים (ריק = כל יום):</div>
+            <div style={{display:"flex",gap:3}}>
+              {DS.map((d,i)=>{const active=newTask.activeDays?newTask.activeDays.includes(i):false;return(
+                <button key={i} onClick={()=>{const cur=newTask.activeDays||[];const nd=active?cur.filter(x=>x!==i):[...cur,i];setNewTask({...newTask,activeDays:nd.length===0||nd.length===7?null:nd.sort()});}}
+                  style={{width:28,height:28,fontSize:10,fontWeight:700,borderRadius:7,cursor:"pointer",border:active?"2px solid #6366f1":"1px solid var(--border)",background:active?"#6366f120":"var(--barBg)",color:active?"#6366f1":"var(--textTer)"}}>{d}</button>
+              );})}
+            </div>
+          </div>
           <button onClick={addNewTask} style={{width:"100%",padding:10,background:"linear-gradient(135deg,#4f46e5,#6366f1)",border:"none",borderRadius:10,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>✨ הוסף</button>
         </div>
       )}
@@ -247,6 +318,32 @@ export default function ManageScreen({ S, app }) {
           )}
         </div>
       ))}
+
+      {manageSub==="data"&&<>
+        <h3 style={S.st}>💾 ייצוא/ייבוא נתונים</h3>
+        <p style={{fontSize:10,color:"var(--textSec)",margin:"0 0 12px"}}>גבו את כל הנתונים כקובץ JSON, או שחזרו ממכשיר אחר</p>
+        <div style={{background:"var(--card)",borderRadius:12,padding:16,marginBottom:10,border:"1px solid var(--border)"}}>
+          <div style={{fontSize:13,fontWeight:700,color:"var(--text)",marginBottom:6}}>📤 ייצוא</div>
+          <p style={{fontSize:10,color:"var(--textSec)",margin:"0 0 10px"}}>הורד קובץ גיבוי עם כל המשימות, ההשלמות, הנקודות ושאר הנתונים</p>
+          <button onClick={handleExport} disabled={exporting}
+            style={{width:"100%",padding:12,background:"linear-gradient(135deg,#10b981,#059669)",border:"none",borderRadius:10,color:"#fff",fontSize:13,fontWeight:700,cursor:exporting?"wait":"pointer",opacity:exporting?0.7:1}}>
+            {exporting?"⏳ מייצא...":"📥 הורד גיבוי"}
+          </button>
+        </div>
+        <div style={{background:"var(--card)",borderRadius:12,padding:16,marginBottom:10,border:"1px solid var(--border)"}}>
+          <div style={{fontSize:13,fontWeight:700,color:"var(--text)",marginBottom:6}}>📥 ייבוא</div>
+          <p style={{fontSize:10,color:"var(--textSec)",margin:"0 0 10px"}}>שחזר נתונים מקובץ גיבוי — ⚠️ הנתונים הנוכחיים יוחלפו!</p>
+          <input ref={importFileRef} type="file" accept=".json" onChange={handleImport} style={{display:"none"}}/>
+          <button onClick={()=>{if(confirm('שחזור מגיבוי יחליף את כל הנתונים הנוכחיים. להמשיך?'))importFileRef.current?.click();}} disabled={importing}
+            style={{width:"100%",padding:12,background:"linear-gradient(135deg,#f59e0b,#d97706)",border:"none",borderRadius:10,color:"#fff",fontSize:13,fontWeight:700,cursor:importing?"wait":"pointer",opacity:importing?0.7:1}}>
+            {importing?"⏳ מייבא...":"📂 בחר קובץ גיבוי"}
+          </button>
+        </div>
+        <div style={{background:"#eff6ff",borderRadius:10,padding:12,border:"1px solid #bfdbfe"}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#1e40af",marginBottom:4}}>💡 טיפ</div>
+          <p style={{fontSize:10,color:"#1e40af",margin:0}}>מומלץ לגבות לפני שינויים גדולים. הקובץ כולל: משימות, השלמות, ציונים, XP, אירועים, רשימת קניות, הודעות ועוד.</p>
+        </div>
+      </>}
 
       {manageSub==="log"&&<>
         <h3 style={S.st}>📜 יומן פעולות</h3>

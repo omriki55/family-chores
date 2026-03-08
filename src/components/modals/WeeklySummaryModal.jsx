@@ -7,7 +7,7 @@ export default function WeeklySummaryModal({ S, app }) {
 
   return (
     <div style={S.ov} onClick={() => setShowSummaryModal(false)}>
-      <div style={{ ...S.md, maxWidth: 340 }} onClick={e => e.stopPropagation()}>
+      <div style={{ ...S.md, maxWidth: 340 }} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="סיכום שבועי">
         <h3 style={S.mt}>📊 סיכום שבועי</h3>
         <div style={{ fontSize: 36, textAlign: "center", marginBottom: 4 }}>{weeklySummaryData.completionPct >= 80 ? "🏆" : weeklySummaryData.completionPct >= 50 ? "👍" : "💪"}</div>
         <div style={{ fontSize: 22, fontWeight: 800, color: weeklySummaryData.completionPct >= 80 ? "#10b981" : "#f59e0b", textAlign: "center" }}>{weeklySummaryData.completionPct}%</div>
