@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { HDate, HebrewCalendar, flags } from '@hebcal/core';
 import storage from "./storage.js";
 import S from "./styles.js";
-import { FAMILY, CH, DAYS, DS, DEFAULT_PINS, LEVELS, REMINDERS, PENALTIES, DEFAULT_BADGES, EXAM_BONUSES,
+import { FAMILY, CH, FAMILY_NAME, DAYS, DS, DEFAULT_PINS, LEVELS, REMINDERS, PENALTIES, DEFAULT_BADGES, EXAM_BONUSES,
   INIT_TASKS, DEFAULT_GOALS, GROCERY_CATEGORIES, DEFAULT_CHALLENGES } from "./constants.js";
 import { compressImage, getWk, getToday, getHour, getTimeStr, dateKey, getWkForDate } from "./utils.js";
 // Animations
@@ -10,6 +10,7 @@ import Confetti from "./components/animations/Confetti.jsx";
 import LevelUp from "./components/animations/LevelUp.jsx";
 import BadgeEarned from "./components/animations/BadgeEarned.jsx";
 // Screens
+import OnboardingScreen from "./components/screens/OnboardingScreen.jsx";
 import LoginScreen from "./components/screens/LoginScreen.jsx";
 import PinScreen from "./components/screens/PinScreen.jsx";
 import HomeScreen from "./components/screens/HomeScreen.jsx";
@@ -35,6 +36,7 @@ import PraiseModal from "./components/modals/PraiseModal.jsx";
 import WeeklySummaryModal from "./components/modals/WeeklySummaryModal.jsx";
 
 export default function App(){
+  const[familyConfigured,setFamilyConfigured]=useState(()=>!!localStorage.getItem('family-chores_family-config'));
   const[user,setUser]=useState(null);
   const[screen,setScreen]=useState("login");
   const[pinScreen,setPinScreen]=useState(null);
@@ -57,8 +59,8 @@ export default function App(){
   const[bonusPhoto,setBonusPhoto]=useState(null);
   const[changePinUser,setChangePinUser]=useState(null);
   const[newPinVal,setNewPinVal]=useState("");
-  const[xp,setXp]=useState({peleg:0,yahav:0,yahel:0});
-  const[streaks,setStreaks]=useState({peleg:0,yahav:0,yahel:0});
+  const[xp,setXp]=useState(()=>Object.fromEntries(CH.map(c=>[c,0])));
+  const[streaks,setStreaks]=useState(()=>Object.fromEntries(CH.map(c=>[c,0])));
   const[showConfetti,setShowConfetti]=useState(false);
   const[levelUpInfo,setLevelUpInfo]=useState(null);
   const[goals,setGoals]=useState(DEFAULT_GOALS);
@@ -73,10 +75,10 @@ export default function App(){
   const[praiseStar,setPraiseStar]=useState("⭐");
   const[penalties,setPenalties]=useState([]);
   const[penaltyModal,setPenaltyModal]=useState(null);
-  const[earnedBadges,setEarnedBadges]=useState({peleg:[],yahav:[],yahel:[]});
+  const[earnedBadges,setEarnedBadges]=useState(()=>Object.fromEntries(CH.map(c=>[c,[]])));
   const[badgeNotification,setBadgeNotification]=useState(null);
-  const[totalXpEarned,setTotalXpEarned]=useState({peleg:0,yahav:0,yahel:0});
-  const[approvedCount,setApprovedCount]=useState({peleg:0,yahav:0,yahel:0});
+  const[totalXpEarned,setTotalXpEarned]=useState(()=>Object.fromEntries(CH.map(c=>[c,0])));
+  const[approvedCount,setApprovedCount]=useState(()=>Object.fromEntries(CH.map(c=>[c,0])));
   const[exams,setExams]=useState([]);
   const[examModal,setExamModal]=useState(null);
   const[examScore,setExamScore]=useState("");
@@ -486,6 +488,7 @@ export default function App(){
 
   // ── App object (passed to components) ──
   const app={
+    FAMILY,CH,familyName:FAMILY_NAME,
     user,isP,tasks,completions,cKey,wk,xp,streaks,goals,setGoals,challenges,messages,swaps,
     selDay,setSelDay,screen,setScreen,
     getLevel,getNextLevel,getXpProgress,getWeekStats,getFamilyPct,getTodayPctForChild,
@@ -548,13 +551,24 @@ export default function App(){
     },
   };
 
+  // ── Onboarding (first run) ──
+  if(!familyConfigured) return <OnboardingScreen onComplete={(cfg)=>{
+    localStorage.setItem('family-chores_family-config',JSON.stringify({
+      family:cfg.family,children:cfg.children,pins:cfg.pins,familyName:cfg.familyName
+    }));
+    localStorage.setItem('family-chores_chores-v5',JSON.stringify(cfg.initialData));
+    window.location.reload();
+  }}/>;
+
   // ── PIN Screen ──
   if(pinScreen) return <PinScreen pinScreen={pinScreen} pinInput={pinInput} setPinInput={setPinInput}
     pinError={pinError} setPinError={setPinError} setPinScreen={setPinScreen} verifyPin={verifyPin}/>;
 
   // ── Login Screen ──
+  const handleReset=()=>{if(confirm('האם לאפס את הגדרות המשפחה? כל הנתונים יימחקו!')){
+    localStorage.removeItem('family-chores_family-config');localStorage.removeItem('family-chores_chores-v5');window.location.reload();}};
   if(screen==="login") return <LoginScreen S={S}
-    getLevel={getLevel} setPinScreen={setPinScreen} setPinInput={setPinInput} setPinError={setPinError}/>;
+    getLevel={getLevel} setPinScreen={setPinScreen} setPinInput={setPinInput} setPinError={setPinError} onReset={handleReset}/>;
 
   const me=FAMILY[user];const today=getToday();
 

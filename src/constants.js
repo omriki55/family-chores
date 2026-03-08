@@ -1,14 +1,19 @@
 export const DAYS=["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
 export const DS=["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
-export const DEFAULT_PINS={liron:"1234",omri:"1234",peleg:"1111",yahav:"2222",yahel:"3333"};
-export const FAMILY={
+
+// ── Dynamic family config (loaded from localStorage if onboarding completed) ──
+const _fc=(()=>{try{const s=localStorage.getItem('family-chores_family-config');return s?JSON.parse(s):null;}catch{return null;}})();
+
+export const DEFAULT_PINS=_fc?.pins??{liron:"1234",omri:"1234",peleg:"1111",yahav:"2222",yahel:"3333"};
+export const FAMILY=_fc?.family??{
   liron:{name:"לירון",role:"parent",emoji:"👨",color:"#6366f1",weeklyPay:0},
   omri:{name:"עומרי",role:"parent",emoji:"👩",color:"#ec4899",weeklyPay:0},
   peleg:{name:"פלג",role:"child",emoji:"🧒",weeklyPay:110,color:"#f59e0b"},
   yahav:{name:"יהב",role:"child",emoji:"👦",weeklyPay:75,color:"#10b981"},
   yahel:{name:"יהל",role:"child",emoji:"👧",weeklyPay:0,color:"#8b5cf6"},
 };
-export const CH=["peleg","yahav","yahel"];
+export const CH=_fc?.children??["peleg","yahav","yahel"];
+export const FAMILY_NAME=_fc?.familyName??null;
 export const LEVELS=[
   {name:"מתחיל",emoji:"🌱",min:0},{name:"חרוץ",emoji:"💪",min:100},{name:"מסודר",emoji:"📋",min:250},
   {name:"אחראי",emoji:"🎯",min:500},{name:"כוכב",emoji:"⭐",min:800},{name:"גיבור",emoji:"🦸",min:1200},
@@ -59,17 +64,17 @@ export const DEFAULT_BADGES=[
 ];
 export const EXAM_BONUSES=[{min:100,bonus:100,label:"ציון 100!"},{min:90,bonus:50,label:"ציון 90+"}];
 export const INIT_TASKS=[
-  {id:"t1",title:"העמסת מדיח",icon:"🍽️",weight:12,assignedTo:["peleg","yahav","yahel"],bonus:false,type:"shared"},
-  {id:"t2",title:"פינוי מדיח",icon:"🫧",weight:10,assignedTo:["peleg","yahav","yahel"],bonus:false,type:"shared"},
-  {id:"t3",title:"הורדת זבל",icon:"🗑️",weight:8,assignedTo:["peleg","yahav"],bonus:false,type:"shared"},
-  {id:"t4",title:"סידור החדר",icon:"🛏️",weight:12,assignedTo:["peleg","yahav","yahel"],bonus:false,type:"personal"},
-  {id:"t5",title:"הכנת שיעורים",icon:"📚",weight:15,assignedTo:["peleg","yahav","yahel"],bonus:false,type:"personal"},
-  {id:"t6",title:"ניקוי שולחן",icon:"🪑",weight:6,assignedTo:["peleg","yahav","yahel"],bonus:false,type:"shared"},
-  {id:"t7",title:"קיפול כביסה",icon:"👕",weight:10,assignedTo:["peleg","yahav"],bonus:false,type:"shared"},
-  {id:"t8",title:"שאיבת אבק",icon:"🧹",weight:9,assignedTo:["peleg","yahav"],bonus:false,type:"shared"},
-  {id:"t9",title:"טיפול בחיות",icon:"🐕",weight:8,assignedTo:["yahel"],bonus:false,type:"personal"},
-  {id:"t10",title:"הצעת מיטה",icon:"🛌",weight:5,assignedTo:["peleg","yahav","yahel"],bonus:false,type:"personal"},
-  {id:"t11",title:"סידור נעליים",icon:"👟",weight:5,assignedTo:["peleg","yahav","yahel"],bonus:false,type:"personal"},
+  {id:"t1",title:"העמסת מדיח",icon:"🍽️",weight:12,assignedTo:[...CH],bonus:false,type:"shared"},
+  {id:"t2",title:"פינוי מדיח",icon:"🫧",weight:10,assignedTo:[...CH],bonus:false,type:"shared"},
+  {id:"t3",title:"הורדת זבל",icon:"🗑️",weight:8,assignedTo:[...CH],bonus:false,type:"shared"},
+  {id:"t4",title:"סידור החדר",icon:"🛏️",weight:12,assignedTo:[...CH],bonus:false,type:"personal"},
+  {id:"t5",title:"הכנת שיעורים",icon:"📚",weight:15,assignedTo:[...CH],bonus:false,type:"personal"},
+  {id:"t6",title:"ניקוי שולחן",icon:"🪑",weight:6,assignedTo:[...CH],bonus:false,type:"shared"},
+  {id:"t7",title:"קיפול כביסה",icon:"👕",weight:10,assignedTo:[...CH],bonus:false,type:"shared"},
+  {id:"t8",title:"שאיבת אבק",icon:"🧹",weight:9,assignedTo:[...CH],bonus:false,type:"shared"},
+  {id:"t9",title:"טיפול בחיות",icon:"🐕",weight:8,assignedTo:[...CH],bonus:false,type:"personal"},
+  {id:"t10",title:"הצעת מיטה",icon:"🛌",weight:5,assignedTo:[...CH],bonus:false,type:"personal"},
+  {id:"t11",title:"סידור נעליים",icon:"👟",weight:5,assignedTo:[...CH],bonus:false,type:"personal"},
 ];
 export const DEFAULT_GOALS=[
   {id:"g1",title:"שבוע מושלם",emoji:"🏆",desc:"כל הילדים מעל 90%",target:90,reward:"פיצה משפחתית 🍕",active:true},
