@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { HDate, HebrewCalendar, flags } from '@hebcal/core';
 import storage from "./storage.firebase.js";
+import { db } from "./firebase.js";
+import { doc, setDoc } from "firebase/firestore";
 import { migrateToFirestore } from "./migration.js";
 import S from "./styles.js";
 import { FAMILY, CH, FAMILY_NAME, DAYS, DS, DEFAULT_PINS, LEVELS, REMINDERS, PENALTIES, DEFAULT_BADGES, EXAM_BONUSES,
@@ -802,6 +804,15 @@ export default function App(){
       await storage.set('family-config',configStr);
       const d=cfg.initialData;
       for(const[k,v]of Object.entries(d)){await storage.set(k,JSON.stringify(v));}
+      // Register in admin registry
+      try{
+        await setDoc(doc(db,'admin','registry','families',familyId),{
+          familyId,familyName:cfg.familyName||'',
+          memberCount:Object.keys(cfg.family||{}).length,
+          childCount:(cfg.children||[]).length,
+          registeredAt:new Date().toISOString(),source:'auto'
+        });
+      }catch(re){console.error('Admin registry:',re);}
     }catch(e){console.error('Onboarding save:',e);}
     window.location.reload();
   }} onJoin={async(familyId)=>{
