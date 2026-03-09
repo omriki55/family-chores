@@ -102,8 +102,9 @@ export default function OnboardingScreen({onComplete,onJoin,signInWithGoogle}){
       earnedBadges:Object.fromEntries(childIds.map(c=>[c,[]])),
       totalXpEarned:Object.fromEntries(childIds.map(c=>[c,0])),
       approvedCount:Object.fromEntries(childIds.map(c=>[c,0])),
-      exams:[],calEvents:[],groceries:[],auditLog:[],challenges:[],
+      exams:[],auditLog:[],challenges:[],
       lastSummaryWeek:null,locations:{},
+      onboardingDate:new Date().toISOString(),
     };
     onComplete({family,children:childIds,pins,familyName:familyName.trim()||'המשפחה שלנו',initialData});
   };
@@ -184,7 +185,7 @@ export default function OnboardingScreen({onComplete,onJoin,signInWithGoogle}){
         <p style={{fontSize:13,color:'#64748b',margin:'0 0 6px',lineHeight:1.5}}>אפליקציה לניהול משימות ומעקב<br/>אחר הרגלים בריאים למשפחה שלכם</p>
         <p style={{fontSize:11,color:'#94a3b8',margin:'0 0 22px'}}>⏱️ ההגדרה לוקחת כ-2 דקות</p>
         <div style={{display:'flex',gap:8,justifyContent:'center',marginBottom:18,flexWrap:'wrap'}}>
-          {['✅ מעקב משימות','🎮 גיימיפיקציה','💰 דמי כיס','📅 לוח שנה'].map(f=>(
+          {['✅ מעקב משימות','🎮 גיימיפיקציה','💰 דמי כיס','🎙️ הודעות קוליות'].map(f=>(
             <span key={f} style={{padding:'4px 10px',background:'#ede9fe',borderRadius:20,fontSize:11,color:'#6366f1',fontWeight:600}}>{f}</span>
           ))}
         </div>

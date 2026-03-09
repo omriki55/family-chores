@@ -80,11 +80,14 @@ export const DEFAULT_GOALS=[
   {id:"g1",title:"שבוע מושלם",emoji:"🏆",desc:"כל הילדים מעל 90%",target:90,reward:"פיצה משפחתית 🍕",active:true},
   {id:"g2",title:"אפס החמצות",emoji:"💯",desc:"אף משימה לא פוספסה ביום",target:100,reward:"סרט ביחד 🎬",active:true},
 ];
-export const GROCERY_CATEGORIES=[
-  {id:"fruits",name:"פירות וירקות",emoji:"🍎"},{id:"dairy",name:"חלב וגבינות",emoji:"🥛"},
-  {id:"meat",name:"בשר ודגים",emoji:"🥩"},{id:"bread",name:"לחם ומאפים",emoji:"🍞"},
-  {id:"snacks",name:"חטיפים ומתוקים",emoji:"🍫"},{id:"drinks",name:"שתייה",emoji:"🥤"},
-  {id:"cleaning",name:"ניקיון",emoji:"🧹"},{id:"other",name:"אחר",emoji:"📦"},
+export const FIRST_WEEK_TIPS=[
+  {day:0,text:"ברכות! היום הגדירו את המשימות הראשונות",emoji:"🎉"},
+  {day:1,text:"בדקו אם הילדים סיימו משימות ואשרו אותן",emoji:"✅"},
+  {day:2,text:"טיפ: תנו שבחים כשילד משלים רצף",emoji:"🌟"},
+  {day:3,text:"שלחו הודעה קולית לילדים – זה מחזק!",emoji:"🎙️"},
+  {day:4,text:"בדקו את הדוחות – איך הולך השבוע?",emoji:"📊"},
+  {day:5,text:"הגדירו יעד משפחתי לעידוד",emoji:"🎯"},
+  {day:6,text:"סוף שבוע ראשון! סכמו יחד עם הילדים",emoji:"🏆"},
 ];
 export const RECURRENCE_PRESETS=[
   {id:"daily",label:"כל יום",days:null},
@@ -106,5 +109,6 @@ export const AUDIT_LABELS={
   task_done:"✅ ביצוע משימה",approved:"👍 אישור",rejected:"❌ דחייה",penalty_added:"⚠️ קנס",
   task_created:"✨ יצירת משימה",task_deleted:"🗑️ מחיקת משימה",task_updated:"✏️ עדכון משימה",pin_changed:"🔒 שינוי PIN",
   bonus_submitted:"⭐ יוזמה",swap_requested:"🔄 בקשת החלפה",swap_approved:"🔄 החלפה אושרה",swap_rejected:"❌ החלפה נדחתה",
-  exam_added:"📝 מבחן",cal_event_added:"📅 אירוע חדש",cal_event_deleted:"🗑️ מחיקת אירוע",
+  exam_added:"📝 מבחן",
+  voice_message_sent:"🎙️ הודעה קולית",
 };

@@ -10,6 +10,7 @@ import { db } from './firebase.js';
 import { doc, getDoc, setDoc, deleteDoc, collection, getDocs, onSnapshot } from 'firebase/firestore';
 
 let COLLECTION = 'family-chores';
+const LS_PREFIX = 'family-chores_';
 
 const storage = {
   // Set collection path (e.g., 'families/ABC123/data')
@@ -25,22 +26,35 @@ const storage = {
     try {
       const docRef = doc(db, COLLECTION, key);
       const docSnap = await getDoc(docRef);
-      if (!docSnap.exists()) return null;
+      if (!docSnap.exists()) {
+        // Fallback: try localStorage
+        const ls = localStorage.getItem(LS_PREFIX + key);
+        if (ls) return { key, value: ls };
+        return null;
+      }
       return { key, value: docSnap.data().value };
     } catch (e) {
       console.error('Firebase get error:', e);
+      // Fallback: try localStorage when Firestore is unavailable
+      try {
+        const ls = localStorage.getItem(LS_PREFIX + key);
+        if (ls) return { key, value: ls };
+      } catch {}
       return null;
     }
   },
 
   async set(key, value) {
+    // Always write to localStorage as backup
+    try { localStorage.setItem(LS_PREFIX + key, value); } catch {}
     try {
       const docRef = doc(db, COLLECTION, key);
       await setDoc(docRef, { value, updatedAt: new Date().toISOString() });
       return { key, value };
     } catch (e) {
       console.error('Firebase set error:', e);
-      return null;
+      // Return success from localStorage fallback
+      return { key, value };
     }
   },
 

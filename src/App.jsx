@@ -1,14 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { HDate, HebrewCalendar, flags } from '@hebcal/core';
 import storage from "./storage.firebase.js";
 import { db } from "./firebase.js";
 import { doc, setDoc } from "firebase/firestore";
 import { migrateToFirestore } from "./migration.js";
 import S from "./styles.js";
 import { FAMILY, CH, FAMILY_NAME, DAYS, DS, DEFAULT_PINS, LEVELS, REMINDERS, PENALTIES, DEFAULT_BADGES, EXAM_BONUSES,
-  INIT_TASKS, DEFAULT_GOALS, GROCERY_CATEGORIES, DEFAULT_CHALLENGES, RECURRENCE_PRESETS } from "./constants.js";
+  INIT_TASKS, DEFAULT_GOALS, DEFAULT_CHALLENGES, RECURRENCE_PRESETS } from "./constants.js";
 import { t, setLanguage, getLang, isRTL } from "./i18n/index.js";
-import { compressImage, getWk, getToday, getHour, getTimeStr, dateKey, getWkForDate } from "./utils.js";
+import { compressImage, getWk, getToday, getHour, getTimeStr } from "./utils.js";
 import { isTaskForChild as _isTaskForChild, isRecurringTask, getLevel as _getLevel, getNextLevel as _getNextLevel, getXpProgress as _getXpProgress, getNewBadges } from "./logic.js";
 import { signInWithGoogle, signOut as authSignOut, onAuthChange, generateFamilyCode } from "./auth.js";
 // Animations
@@ -20,9 +19,7 @@ import OnboardingScreen from "./components/screens/OnboardingScreen.jsx";
 import LoginScreen from "./components/screens/LoginScreen.jsx";
 import PinScreen from "./components/screens/PinScreen.jsx";
 import HomeScreen from "./components/screens/HomeScreen.jsx";
-import WallScreen from "./components/screens/WallScreen.jsx";
-import CalendarScreen from "./components/screens/CalendarScreen.jsx";
-import GroceryScreen from "./components/screens/GroceryScreen.jsx";
+import VoiceMessagesScreen from "./components/screens/VoiceMessagesScreen.jsx";
 import TasksScreen from "./components/screens/TasksScreen.jsx";
 import BadgesScreen from "./components/screens/BadgesScreen.jsx";
 import DashboardScreen from "./components/screens/DashboardScreen.jsx";
@@ -31,7 +28,6 @@ import ManageScreen from "./components/screens/ManageScreen.jsx";
 import CounselorScreen from "./components/screens/CounselorScreen.jsx";
 import ProfileScreen from "./components/screens/ProfileScreen.jsx";
 import GalleryScreen from "./components/screens/GalleryScreen.jsx";
-import MealScreen from "./components/screens/MealScreen.jsx";
 import RewardsScreen from "./components/screens/RewardsScreen.jsx";
 // Modals
 import SwapModal from "./components/modals/SwapModal.jsx";
@@ -39,9 +35,7 @@ import BonusModal from "./components/modals/BonusModal.jsx";
 import PhotoModal from "./components/modals/PhotoModal.jsx";
 import DoneConfirmModal from "./components/modals/DoneConfirmModal.jsx";
 import PenaltyModal from "./components/modals/PenaltyModal.jsx";
-import CalEventModal from "./components/modals/CalEventModal.jsx";
 import ExamModal from "./components/modals/ExamModal.jsx";
-import PraiseModal from "./components/modals/PraiseModal.jsx";
 import WeeklySummaryModal from "./components/modals/WeeklySummaryModal.jsx";
 import TimerModal from "./components/modals/TimerModal.jsx";
 
@@ -86,9 +80,6 @@ export default function App(){
   const[reminderShown,setReminderShown]=useState({});
   const[doneConfirm,setDoneConfirm]=useState(null);
   const[messages,setMessages]=useState([]);
-  const[praiseModal,setPraiseModal]=useState(null);
-  const[praiseText,setPraiseText]=useState("");
-  const[praiseStar,setPraiseStar]=useState("⭐");
   const[penalties,setPenalties]=useState([]);
   const[penaltyModal,setPenaltyModal]=useState(null);
   const[earnedBadges,setEarnedBadges]=useState(()=>Object.fromEntries(CH.map(c=>[c,[]])));
@@ -98,18 +89,6 @@ export default function App(){
   const[exams,setExams]=useState([]);
   const[examModal,setExamModal]=useState(null);
   const[examScore,setExamScore]=useState("");
-  const[wallText,setWallText]=useState("");
-  const[wallTo,setWallTo]=useState("wall");
-  const[calYear,setCalYear]=useState(new Date().getFullYear());
-  const[calMonth,setCalMonth]=useState(new Date().getMonth());
-  const[calSelDate,setCalSelDate]=useState(null);
-  const[calEvents,setCalEvents]=useState([]);
-  const[calEventModal,setCalEventModal]=useState(false);
-  const[calNewEvent,setCalNewEvent]=useState({title:"",icon:"📌",type:"custom",recurring:null,members:[]});
-  const[groceries,setGroceries]=useState([]);
-  const[groceryInput,setGroceryInput]=useState("");
-  const[groceryCat,setGroceryCat]=useState("other");
-  const[groceryRecurring,setGroceryRecurring]=useState(false);
   const[showSummaryModal,setShowSummaryModal]=useState(false);
   const[weeklySummaryData,setWeeklySummaryData]=useState(null);
   const[lastSummaryWeek,setLastSummaryWeek]=useState(null);
@@ -133,6 +112,7 @@ export default function App(){
   const[profileChild,setProfileChild]=useState(null);
   const[activeTimer,setActiveTimer]=useState(null);
   const[soundEnabled,setSoundEnabled]=useState(()=>localStorage.getItem('family-chores-sound')!=='0');
+  const[onboardingDate,setOnboardingDate]=useState(null);
   const[loading,setLoading]=useState(true);
   const[lang,setLang]=useState(getLang);
   const[isOffline,setIsOffline]=useState(!navigator.onLine);
@@ -161,8 +141,6 @@ export default function App(){
     const d_txp=await lk('totalXpEarned');if(d_txp)setTotalXpEarned(d_txp);
     const d_ac=await lk('approvedCount');if(d_ac)setApprovedCount(d_ac);
     const d_ex=await lk('exams');if(d_ex)setExams(d_ex);
-    const d_ce=await lk('calEvents');if(d_ce)setCalEvents(d_ce);
-    const d_gr=await lk('groceries');if(d_gr)setGroceries(d_gr);
     const d_al=await lk('auditLog');if(d_al)setAuditLog(d_al);
     const d_ch=await lk('challenges');if(d_ch)setChallenges(d_ch);
     const d_lsw=await lk('lastSummaryWeek');if(d_lsw)setLastSummaryWeek(d_lsw);
@@ -174,6 +152,7 @@ export default function App(){
     const d_cc=await lk('customChallenges');if(d_cc)setCustomChallenges(d_cc);
     const d_cr=await lk('childReminders');if(d_cr)setChildReminders(d_cr);
     const d_av=await lk('avatars');if(d_av)setAvatars(d_av);
+    const d_od=await lk('onboardingDate');if(d_od)setOnboardingDate(d_od);
     setLoading(false);
   }catch(e){console.error('Load error:',e);setLoading(false);}})();},[]);
 
@@ -189,7 +168,6 @@ export default function App(){
       storage.onDataChange('tasks',(v)=>{try{setTasks(JSON.parse(v));}catch{}}),
       storage.onDataChange('messages',(v)=>{try{setMessages(JSON.parse(v).map(m=>({...m,type:m.type||"praise",reactions:m.reactions||{}})));}catch{}}),
       storage.onDataChange('locations',(v)=>{try{setLocations(JSON.parse(v));}catch{}}),
-      storage.onDataChange('groceries',(v)=>{try{setGroceries(JSON.parse(v));}catch{}}),
       storage.onDataChange('xp',(v)=>{try{setXp(JSON.parse(v));}catch{}}),
       storage.onDataChange('streaks',(v)=>{try{setStreaks(JSON.parse(v));}catch{}}),
     ];
@@ -282,38 +260,6 @@ export default function App(){
   const isTaskForChild=(task,cid,day,dateStr)=>_isTaskForChild(task,cid,day,dateStr);
   const getChildW=(cid)=>tasks.filter(t=>isTaskForChild(t,cid,selDay)&&!t.bonus).reduce((s,t)=>s+t.weight,0);
 
-  // ── Calendar helpers ──
-  const getMonthHolidays=(year,month)=>{
-    const evs=HebrewCalendar.calendar({start:new Date(year,month,1),end:new Date(year,month+1,0),il:true,locale:'he'});
-    const map={};
-    for(const ev of evs){const g=ev.getDate().greg();const k=dateKey(g.getFullYear(),g.getMonth(),g.getDate());
-      if(!map[k])map[k]=[];map[k].push({title:ev.render('he'),emoji:ev.getFlags()&flags.LIGHT_CANDLES?'🕯️':'✡️'});}
-    return map;
-  };
-  const getTasksForDate=(dateStr)=>{
-    const d=new Date(dateStr),dow=d.getDay(),w=getWkForDate(dateStr),result={};
-    CH.forEach(cid=>{const ct=tasks.filter(t=>isTaskForChild(t,cid,dow)&&!t.bonus);
-      result[cid]=ct.map(t=>{const k=`${w}_${t.id}_${cid}_${dow}`;return{...t,completion:completions[k]||null};});});
-    return result;
-  };
-  const eventsForDate=(dateStr)=>calEvents.filter(ev=>{
-    if(ev.date===dateStr)return true;
-    if(ev.recurring==="yearly")return ev.date.slice(5)===dateStr.slice(5);
-    if(ev.recurring==="monthly")return ev.date.slice(8)===dateStr.slice(8);
-    if(ev.recurring==="weekly")return new Date(ev.date).getDay()===new Date(dateStr).getDay();
-    return false;
-  });
-  const calPrev=()=>{if(calMonth===0){setCalMonth(11);setCalYear(y=>y-1);}else setCalMonth(m=>m-1);setCalSelDate(null);};
-  const calNext=()=>{if(calMonth===11){setCalMonth(0);setCalYear(y=>y+1);}else setCalMonth(m=>m+1);setCalSelDate(null);};
-  const addCalEvent=()=>{
-    if(!calNewEvent.title.trim()){flash("⚠️ חסר שם");return;}
-    const ne=[...calEvents,{...calNewEvent,id:"ev_"+Date.now(),date:calEventModal.date,createdBy:user,color:FAMILY[user]?.color||"#6366f1"}];
-    const al=logAudit("cal_event_added",{title:calNewEvent.title});
-    setCalEvents(ne);save({calEvents:ne,auditLog:al});setCalEventModal(false);
-    setCalNewEvent({title:"",icon:"📌",type:"custom",recurring:null,members:[]});flash("📅 נוסף!");
-  };
-  const deleteCalEvent=(evId)=>{const ne=calEvents.filter(e=>e.id!==evId);const al=logAudit("cal_event_deleted",{evId});setCalEvents(ne);save({calEvents:ne,auditLog:al});flash("🗑️");};
-
   // ── XP & Levels ──
   const getLevel=(cid)=>_getLevel(xp[cid]||0, LEVELS);
   const getNextLevel=(cid)=>_getNextLevel(xp[cid]||0, LEVELS);
@@ -325,8 +271,7 @@ export default function App(){
     setXp(newXp);
     const newLv=LEVELS.slice().reverse().find(l=>(newXp[cid]||0)>=l.min);
     if(newLv&&newLv.min>oldLv.min){setLevelUpInfo(newLv);setTimeout(()=>setLevelUpInfo(null),3000);
-      playSound('levelup');haptic(200);
-      const sm=addSystemMessage(`${FAMILY[cid]?.name} עלה/תה לרמה ${newLv.name}! ${newLv.emoji}`,"⬆️");setMessages(sm);}
+      playSound('levelup');haptic(200);}
     return newXp;
   };
 
@@ -349,8 +294,7 @@ export default function App(){
     const eb=EXAM_BONUSES.find(x=>s>=x.min);
     if(!eb){flash("⚠️ ציון מתחת ל-90, אין בונוס");setExamModal(null);setExamScore("");return;}
     const ne=[...exams,{id:"ex_"+Date.now(),childId,score:s,bonus:eb.bonus,ts:Date.now(),by:user}];setExams(ne);
-    const nm=[...messages,{id:"msg_"+Date.now(),from:user,to:childId,text:`📝 ${eb.label} - בונוס ${eb.bonus}₪!`,star:"📝",ts:Date.now()}];
-    const al=logAudit("exam_added",{childId,score:s});setMessages(nm);save({exams:ne,messages:nm,auditLog:al});flash(`📝 ${eb.label} - ${eb.bonus}₪ ל${FAMILY[childId]?.name}!`);
+    const al=logAudit("exam_added",{childId,score:s});save({exams:ne,auditLog:al});flash(`📝 ${eb.label} - ${eb.bonus}₪ ל${FAMILY[childId]?.name}!`);
     setExamModal(null);setExamScore("");
   };
 
@@ -366,7 +310,7 @@ export default function App(){
     const allToday=tasks.filter(t=>isTaskForChild(t,cid,day)&&!t.bonus);
     const allDone=allToday.every(t=>{const kk=t.id===tid?k:cKey(t.id,cid,day);return nc[kk]?.done;});
     if(allDone){setShowConfetti(true);setTimeout(()=>setShowConfetti(false),3000);
-      const sm=addSystemMessage(`${FAMILY[cid]?.name} סיים/ה את כל המשימות! 🎉`,"🎉");setMessages(sm);save({completions:nc,messages:sm});flash("✅ בוצע!");return;}
+      save({completions:nc});flash("✅ בוצע!");return;}
     const al=logAudit("task_done",{taskId:tid,childId:cid});save({completions:nc,auditLog:al});flash("✅ בוצע!");haptic();playSound('done');
   };
 
@@ -531,31 +475,14 @@ export default function App(){
   const handleBonusPhoto=async(e)=>{const f=e.target.files[0];if(!f)return;
     const compressed=await compressImage(f,600);setBonusPhoto(compressed);};
 
-  const approveWithPraise=(tid,cid,day)=>{setPraiseModal({taskId:tid,childId:cid,day});setPraiseText("");setPraiseStar("⭐");};
-  const submitPraise=()=>{if(!praiseModal)return;const{taskId,childId,day}=praiseModal;
-    approve(taskId,childId,day);
-    if(praiseText.trim()||praiseStar){const nm=[...messages,{id:"msg_"+Date.now(),from:user,to:childId,taskId,text:praiseText.trim(),star:praiseStar,ts:Date.now()}];
-      setMessages(nm);save({messages:nm});}
-    setPraiseModal(null);setPraiseText("");};
-
   const addPenalty=(childId,penaltyId)=>{
     const p=PENALTIES.find(x=>x.id===penaltyId);if(!p)return;
     const newXp={...xp,[childId]:Math.max(0,(xp[childId]||0)-p.xp)};setXp(newXp);
     const np=[...penalties,{id:"pen_"+Date.now(),childId,penaltyId,by:user,ts:Date.now()}];
     setPenalties(np);
-    const nm=[...messages,{id:"msg_"+Date.now(),from:user,to:childId,text:`⚠️ הופחתו ${p.xp} נקודות - ${p.title}`,star:"⚠️",ts:Date.now()}];
-    setMessages(nm);
-    const al=logAudit("penalty_added",{childId,penaltyId,xp:p.xp});save({xp:newXp,penalties:np,messages:nm,auditLog:al});flash(`⚠️ -${p.xp}XP`);setPenaltyModal(null);
+    const al=logAudit("penalty_added",{childId,penaltyId,xp:p.xp});save({xp:newXp,penalties:np,auditLog:al});flash(`⚠️ -${p.xp}XP`);setPenaltyModal(null);
   };
 
-  // ── Grocery ──
-  const addGroceryItem=()=>{if(!groceryInput.trim()){flash("⚠️ חסר שם מוצר");return;}
-    const ng=[...groceries,{id:"gr_"+Date.now(),title:groceryInput.trim(),category:groceryCat,bought:false,recurring:groceryRecurring,addedBy:user,ts:Date.now()}];
-    setGroceries(ng);save({groceries:ng});setGroceryInput("");setGroceryRecurring(false);flash("🛒 נוסף!");};
-  const toggleGroceryBought=(grId)=>{const ng=groceries.map(g=>g.id===grId?{...g,bought:!g.bought}:g);setGroceries(ng);save({groceries:ng});};
-  const deleteGroceryItem=(grId)=>{const ng=groceries.filter(g=>g.id!==grId);setGroceries(ng);save({groceries:ng});flash("🗑️");};
-  const clearBoughtGroceries=()=>{const recurring=groceries.filter(g=>g.bought&&g.recurring).map(g=>({...g,bought:false,ts:Date.now()}));
-    const remaining=groceries.filter(g=>!g.bought);const ng=[...remaining,...recurring];setGroceries(ng);save({groceries:ng});flash("🧹 נוקה!");};
   const handleInstall=async()=>{if(!deferredPrompt.current)return;deferredPrompt.current.prompt();
     await deferredPrompt.current.userChoice;deferredPrompt.current=null;setInstallReady(false);};
 
@@ -658,31 +585,21 @@ export default function App(){
       save({challenges:nc});}
   };
 
-  // ── Wall ──
-  const sendWallMessage=(text,to="wall")=>{
-    if(!text.trim())return;
-    const nm=[...messages,{id:"msg_"+Date.now(),from:user,to,text:text.trim(),star:null,ts:Date.now(),type:"free",reactions:{}}];
-    setMessages(nm);save({messages:nm});setWallText("");flash("💬 נשלח!");
-  };
+  // ── Nudge ──
   const sendNudge=(childId)=>{
-    if(messages.some(m=>m.type==="nudge"&&m.to===childId&&(Date.now()-m.ts)<1800000)){flash("⏳ כבר נשלח לאחרונה");return;}
     const pending=tasks.filter(t=>isTaskForChild(t,childId,getToday())&&!t.bonus&&!completions[cKey(t.id,childId,getToday())]?.done).length;
-    const nm=[...messages,{id:"msg_"+Date.now(),from:user,to:childId,text:`👋 תזכורת עדינה: יש לך ${pending} משימ${pending===1?"ה":"ות"} להיום`,star:"👋",ts:Date.now(),type:"nudge",reactions:{}}];
-    setMessages(nm);save({messages:nm});flash(`👋 נשלח ל${FAMILY[childId]?.name}`);
+    flash(`👋 ${FAMILY[childId]?.name}: ${pending} משימות ממתינות`);
   };
-  const addSystemMessage=(text,star="🎉",curMessages)=>{
-    const base=curMessages||messages;
-    return[...base,{id:"msg_"+Date.now(),from:"system",to:"wall",text,star,ts:Date.now(),type:"system",reactions:{}}];
+
+  // ── Voice Messages ──
+  const sendVoiceMessage=async(audioData,to,duration,mimeType)=>{
+    const nm=[...messages,{id:"vmsg_"+Date.now(),type:"voice",from:user,to,audioData,duration,mimeType,ts:Date.now(),listened:false}];
+    setMessages(nm);save({messages:nm});flash("🎙️ הודעה נשלחה!");
   };
-  const toggleReaction=(msgId,emoji)=>{
-    const nm=messages.map(m=>{if(m.id!==msgId)return m;const reactions={...(m.reactions||{})};
-      const users=reactions[emoji]||[];
-      if(users.includes(user)){reactions[emoji]=users.filter(u=>u!==user);if(reactions[emoji].length===0)delete reactions[emoji];}
-      else{reactions[emoji]=[...users,user];}
-      return{...m,reactions};});
+  const markVoiceListened=(msgId)=>{
+    const nm=messages.map(m=>m.id===msgId?{...m,listened:true}:m);
     setMessages(nm);save({messages:nm});
   };
-  const getWallMessages=()=>messages.filter(m=>m.to==="wall"||m.from===user||m.to===user).sort((a,b)=>b.ts-a.ts).slice(0,50);
 
   // ── PIN ──
   const verifyPin=(uid,pin)=>{const correct=pins[uid]||DEFAULT_PINS[uid];
@@ -707,33 +624,26 @@ export default function App(){
     installReady,handleInstall,setInstallReady,
     setShowSummaryModal,setWeeklySummaryData,getWeekCompletionCount,getLeadingChild,getFamilyStreak,getWeekXpTotal,
     isTaskForChild,
-    // Wall
-    wallText,setWallText,wallTo,setWallTo,sendWallMessage,getWallMessages,toggleReaction,
-    // Calendar
-    calYear,calMonth,calPrev,calNext,calSelDate,setCalSelDate,
-    eventsForDate,getMonthHolidays,getTasksForDate,dateKey,deleteCalEvent,setCalEventModal,
-    calEventModal,calNewEvent,setCalNewEvent,addCalEvent,
-    // Grocery
-    groceries,groceryInput,setGroceryInput,groceryCat,setGroceryCat,
-    groceryRecurring,setGroceryRecurring,addGroceryItem,toggleGroceryBought,deleteGroceryItem,clearBoughtGroceries,
+    // Guidance
+    onboardingDate,getDaysSinceOnboarding:()=>{if(!onboardingDate)return-1;return Math.floor((Date.now()-new Date(onboardingDate).getTime())/(1000*60*60*24));},
+    // Voice Messages
+    sendVoiceMessage,markVoiceListened,
     // Tasks
-    setPhotoModal,approveWithPraise,reject,deleteTask,
+    setPhotoModal,reject,deleteTask,
     // Manage
     manageSub,setManageSub,editTask,setEditTask,newTask,setNewTask,
     changePinUser,setChangePinUser,newPinVal,setNewPinVal,
     dragIdx,setDragIdx,dragOverIdx,setDragOverIdx,
     updateTask,changeWeight,reorderTasks,addNewTask,addSuggested,updatePin,save,flash,
     activeReminders,setActiveReminders,auditLog,
-    // Approve
     // Modals
     swapModal,setSwapModal,requestSwap,
-    bonusModal,setBonusModal,bonusTitle,setBonusTitle,bonusIcon,setBonusIcon,
+    bonusModal,bonusTitle,setBonusTitle,bonusIcon,setBonusIcon,
     bonusFileRef,bonusPhoto,setBonusPhoto,handleBonusPhoto,submitBonus,
-    photoModal,setPhotoModal,fileRef,handlePhoto,markDone,
-    doneConfirm,setDoneConfirm,
-    penaltyModal,setPenaltyModal,addPenalty,
-    examModal,setExamModal,examScore,setExamScore,addExam,
-    praiseModal,setPraiseModal,praiseText,setPraiseText,praiseStar,setPraiseStar,submitPraise,approve,
+    photoModal,fileRef,handlePhoto,markDone,
+    addPenalty,
+    examScore,setExamScore,addExam,
+    approve,
     showSummaryModal,weeklySummaryData,
     // Dashboard
     exams,getHeatmapData,getRecentAchievements,getWeeklyXpData,
@@ -763,25 +673,6 @@ export default function App(){
     soundEnabled,setSoundEnabled:v=>{setSoundEnabled(v);localStorage.setItem('family-chores-sound',v?'1':'0');},
     // i18n
     t,lang,setLang:(l)=>{setLanguage(l);setLang(l);},isRTL,
-    // ICS import
-    importIcs:(icsText)=>{
-      const events=[];const lines=icsText.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
-      let cur=null;
-      for(const line of lines){
-        if(line==='BEGIN:VEVENT'){cur={};}
-        else if(line==='END:VEVENT'&&cur){
-          if(cur.title&&cur.date){events.push({id:'ics_'+Date.now()+Math.random(),title:cur.title,icon:'📅',type:'custom',recurring:null,members:[],date:cur.date,createdBy:user,color:'#6366f1',notes:cur.notes||''});}
-          cur=null;
-        } else if(cur){
-          if(line.startsWith('SUMMARY:'))cur.title=line.slice(8).trim();
-          else if(line.startsWith('DTSTART')){const v=line.split(':').pop().trim();if(v.length>=8){const y=v.slice(0,4),m=v.slice(4,6),d=v.slice(6,8);cur.date=`${y}-${m}-${d}`;}}
-          else if(line.startsWith('DESCRIPTION:'))cur.notes=line.slice(12).trim();
-        }
-      }
-      if(events.length===0){flash('⚠️ לא נמצאו אירועים בקובץ');return;}
-      const ne=[...calEvents,...events.filter(e=>!calEvents.some(c=>c.title===e.title&&c.date===e.date))];
-      setCalEvents(ne);save({calEvents:ne});flash(`📅 יובאו ${events.length} אירועים!`);
-    },
   };
 
   // ── Loading screen ──
@@ -841,10 +732,10 @@ export default function App(){
 
   const me=FAMILY[user];const today=getToday();
 
-  const wallUnread=messages.filter(m=>(m.to==="wall"||m.to===user)&&m.from!==user&&(Date.now()-m.ts)<86400000).length;
-  const tabNames={home:t("nav.home"),wall:t("nav.wall"),cal:t("nav.cal"),meal:t("nav.meal"),grocery:t("nav.grocery"),tasks:t("nav.tasks"),badges:t("nav.badges"),rewards:t("nav.rewards"),dash:t("nav.dash"),approve:t("nav.approve"),manage:t("nav.manage"),counselor:t("nav.counselor")};
+  const voiceUnread=messages.filter(m=>m.type==="voice"&&m.to!==undefined&&(m.to==="all"||m.to===user)&&m.from!==user&&!m.listened).length;
+  const tabNames={home:t("nav.home"),voice:t("nav.voice"),tasks:t("nav.tasks"),badges:t("nav.badges"),rewards:t("nav.rewards"),dash:t("nav.dash"),approve:t("nav.approve"),manage:t("nav.manage"),counselor:t("nav.counselor")};
   const tabList=[
-    {id:"home",l:"🏠"},{id:"wall",l:"💬",badge:wallUnread},{id:"cal",l:"📅"},{id:"meal",l:"🍽️"},{id:"grocery",l:"🛒"},{id:"tasks",l:"📋"},
+    {id:"home",l:"🏠"},{id:"voice",l:"🎙️",badge:voiceUnread},{id:"tasks",l:"📋"},
     ...(!isP?[{id:"badges",l:"🏅"},{id:"rewards",l:"🎁"}]:[]),
     ...(isP?[{id:"dash",l:"📊"},{id:"approve",l:"✅"},{id:"manage",l:"⚙️"},{id:"counselor",l:"💡"}]:[]),
   ];
@@ -904,9 +795,7 @@ export default function App(){
 
       <div className="app-content" key={screen} style={{...S.content,animation:'screenIn 0.25s ease-out'}}>
         {screen==="home"&&<HomeScreen S={S} app={app}/>}
-        {screen==="wall"&&<WallScreen S={S} app={app}/>}
-        {screen==="cal"&&<CalendarScreen S={S} app={app}/>}
-        {screen==="grocery"&&<GroceryScreen S={S} app={app}/>}
+        {screen==="voice"&&<VoiceMessagesScreen S={S} app={app}/>}
         {screen==="tasks"&&<TasksScreen S={S} app={app}/>}
         {screen==="badges"&&!isP&&<BadgesScreen S={S} app={app}/>}
         {screen==="rewards"&&!isP&&<RewardsScreen S={S} app={app}/>}
@@ -914,7 +803,6 @@ export default function App(){
         {screen==="approve"&&isP&&<ApproveScreen S={S} app={app}/>}
         {screen==="manage"&&isP&&<ManageScreen S={S} app={app}/>}
         {screen==="counselor"&&isP&&<CounselorScreen S={S} app={app}/>}
-        {screen==="meal"&&<MealScreen S={S} app={app}/>}
         {screen==="profile"&&<ProfileScreen S={S} app={app}/>}
         {screen==="gallery"&&<GalleryScreen S={S} app={app}/>}
       </div>
@@ -924,9 +812,7 @@ export default function App(){
       <PhotoModal S={S} app={app}/>
       <DoneConfirmModal S={S} app={app}/>
       <PenaltyModal S={S} app={app}/>
-      <CalEventModal S={S} app={app}/>
       <ExamModal S={S} app={app}/>
-      <PraiseModal S={S} app={app}/>
       <WeeklySummaryModal S={S} app={app}/>
       <TimerModal S={S} app={app}/>
     </div>

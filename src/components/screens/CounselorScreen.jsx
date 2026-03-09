@@ -33,11 +33,11 @@ const RESPONSES = [
   },
   {
     keywords: ["להתחיל","חדש","לאן","איך","מתחילה","מתחיל","מה לעשות","איפה","onboarding"],
-    text: "ברוכים הבאים! 🎉 כמה צעדים ראשונים מומלצים:\n\n**1.** הכניסו 3-5 משימות בסיסיות (לא יותר מדי בהתחלה)\n**2.** קבעו שיחת משפחה — הסבירו לילדים איך זה עובד\n**3.** התחילו עם ציפיות קטנות — הצלחה קטנה עדיפה על כישלון גדול\n**4.** תגמלו על ניסיון, לא רק על הצלחה\n\nאחרי שבוע-שבועיים תוכלו לגבש ולהוסיף. מוכנים? 💪",
+    text: "ברוכים הבאים! 🎉 כמה צעדים ראשונים מומלצים:\n\n**1.** הכניסו 3-5 משימות בסיסיות (לא יותר מדי בהתחלה)\n**2.** קבעו שיחת משפחה — הסבירו לילדים איך זה עובד\n**3.** שלחו הודעה קולית מעודדת — זה מחבר!\n**4.** התחילו עם ציפיות קטנות — הצלחה קטנה עדיפה על כישלון גדול\n**5.** עקבו אחרי הטיפים היומיים בשבוע הראשון\n\nאחרי שבוע-שבועיים תוכלו לגבש ולהוסיף. מוכנים? 💪",
   },
   {
     keywords: ["מחמאה","לשבח","חיזוק","להגיד","מה לומר","שבח"],
-    text: "מחמאה אפקטיבית היא אמנות 🌟\n\n• **ספציפית** — לא \"כל הכבוד\" אלא \"כל הכבוד שסדרת את הצעצועים לפני שביקשתי!\"\n• **על המאמץ** — לא \"את חכמה\" אלא \"רואים כמה השתדלת\"\n• **בזמן אמת** — מחמאה מיידית עדיפה על מאוחרת\n• **בפומבי** — שבחו בפני אחרים, גם בקיר המשפחתי!\n\nהשתמשו בפיצ'ר 'שבח' באפליקציה — זה נשמר ומופיע לילד/ה 💙",
+    text: "מחמאה אפקטיבית היא אמנות 🌟\n\n• **ספציפית** — לא \"כל הכבוד\" אלא \"כל הכבוד שסדרת את הצעצועים לפני שביקשתי!\"\n• **על המאמץ** — לא \"את חכמה\" אלא \"רואים כמה השתדלת\"\n• **בזמן אמת** — מחמאה מיידית עדיפה על מאוחרת\n• **בהודעה קולית** — שלחו הודעה קולית מעודדת דרך האפליקציה!\n\nתגמול מילולי חם = מוטיבציה גבוהה 💙",
   },
   {
     keywords: ["הרגל","שגרה","רוטינה","יומי","קבוע","כל יום"],
@@ -51,21 +51,25 @@ const RESPONSES = [
     keywords: ["טלפון","מסך","מחשב","משחקים","נינטנדו","זמן מסך"],
     text: "זמן מסך כנגד חובות ביתיות — נושא חם! 📱\n\nכמה גישות:\n• זמן מסך כתגמול — לא עונש — 'אחרי שתסיים, תוכל לשחק'\n• הגדירו זמן מסך ב-screen time settings — ועמדו על זה בעקביות\n• הפכו את האפליקציה לחלק מהשגרה לפני הזמן החופשי\n\nהגבול הכי אפקטיבי הוא הגבול שאתם מוכנים לשמור עליו 🌟",
   },
+  {
+    keywords: ["הודעה","קולי","קולית","הקלטה","שליחה","להקליט"],
+    text: "הודעות קוליות הן כלי עוצמתי להורים 🎙️\n\n• **הודעת בוקר** — 'בוקר טוב! היום יש לכם 3 משימות, בהצלחה!'\n• **עידוד אחרי ביצוע** — 'ראיתי שסיימת את המשימה — כל הכבוד!'\n• **לפני השינה** — 'סיכום קצר של היום — עשיתם עבודה מעולה'\n\nהודעה קולית אישית מחממת ומחזקת הרבה יותר מטקסט 💙",
+  },
 ];
 
 const QUICK_PROMPTS = [
-  "איך להתחיל עם האפליקציה?",
-  "איך להגדיר משימות?",
+  "איך לגרום לילדים להשתמש?",
+  "מה לעשות כשילד לא משתף פעולה?",
+  "איך להגדיר משימות טובות?",
   "מה זה XP ו-levels?",
   "איך עובדת חנות הפרסים?",
-  "הילדים מתנגדים למשימות",
   "קשה לי להיות עקבי/ת",
   "איך לשבח נכון?",
-  "איך לבנות הרגל?",
-  "טיפים ל-onboarding",
-  "איך להשתמש בקיר המשפחתי?",
+  "איך לבנות הרגל יומי?",
   "הילדים לא מוטיבציוניים",
+  "מתי להשתמש בקנסות?",
   "יש ריבים בין אחים",
+  "איך ההודעות הקוליות עוזרות?",
 ];
 
 const DEFAULT_RESPONSES = [
@@ -95,11 +99,24 @@ export default function CounselorScreen({ S, app }) {
   const isDark = app.darkMode;
   const me = FAMILY[user] || {};
 
+  const daysSinceOnboarding = app.getDaysSinceOnboarding ? app.getDaysSinceOnboarding() : -1;
+  const isFirstWeek = daysSinceOnboarding >= 0 && daysSinceOnboarding <= 6;
+
+  // Build a contextual welcome message
+  const buildWelcome = () => {
+    let base = `שלום ${me.name || ''} 👋\n\nאני ${COUNSELOR_NAME}, יועץ הורים AI באפליקציית "משימות המשפחה".\n\n`;
+    if (isFirstWeek) {
+      base += `אתם ביום ${daysSinceOnboarding + 1} מתוך 7 בשבוע הראשון — מקום מצוין לשאול שאלות! 🌟\n`;
+    }
+    base += `כאן כדי לעזור עם כל אתגר — מוטיבציה, עקביות, התנגדות ילדים, בניית הרגלים.\nאפשר גם לשאול על כל פיצ'ר — XP, levels, badges, streaks, חנות פרסים, הודעות קוליות 💙\n\nעל מה נדבר?`;
+    return base;
+  };
+
   // Chat messages for display
   const [history, setHistory] = useState([
     {
       from: 'counselor',
-      text: `שלום ${me.name || ''} 👋\n\nאני ${COUNSELOR_NAME}, יועץ הורים AI באפליקציית "משימות המשפחה".\n\nכאן כדי לעזור עם כל אתגר — מהתנגדות ילדים, דרך עקביות, ועד מוטיבציה ו-onboarding.\nאפשר גם לשאול על כל פיצ'ר באפליקציה — XP, levels, badges, streaks, חנות פרסים, ועוד 💙\n\nעל מה נדבר?`,
+      text: buildWelcome(),
       ts: Date.now(),
     }
   ]);
@@ -123,10 +140,23 @@ export default function CounselorScreen({ S, app }) {
     const parts = [];
     const kids = Object.entries(FAMILY).filter(([,v]) => v.role === 'child');
     if (kids.length > 0) {
-      parts.push(`ילדים במשפחה: ${kids.map(([,v]) => v.name).join(', ')}`);
+      parts.push(`ילדים במשפחה: ${kids.map(([id,v]) => {
+        const xp = app.xp?.[id] || 0;
+        const streak = app.streaks?.[id] || 0;
+        return `${v.name} (XP: ${xp}, רצף: ${streak} ימים)`;
+      }).join(', ')}`);
     }
     if (app.tasks && app.tasks.length > 0) {
       parts.push(`מספר משימות מוגדרות: ${app.tasks.length}`);
+      const completed = app.tasks.filter(t => t.done).length;
+      const pending = app.tasks.filter(t => t.pending).length;
+      parts.push(`סטטוס: ${completed} הושלמו, ${pending} ממתינות לאישור, ${app.tasks.length - completed - pending} פתוחות`);
+    }
+    if (daysSinceOnboarding >= 0) {
+      parts.push(`ימים מאז ההרשמה: ${daysSinceOnboarding + 1}`);
+      if (isFirstWeek) {
+        parts.push(`המשפחה בשבוע הראשון — צריכים יותר הדרכה ועידוד`);
+      }
     }
     return parts.length > 0 ? parts.join('\n') : '';
   };
@@ -226,6 +256,34 @@ export default function CounselorScreen({ S, app }) {
           </button>
         ))}
       </div>
+
+      {/* Proactive suggestion for first week */}
+      {isFirstWeek && history.length <= 1 && (
+        <div style={{
+          background: isDark ? 'rgba(99,102,241,0.1)' : 'linear-gradient(135deg, #ede9fe, #ddd6fe)',
+          border: `1px solid ${isDark ? 'rgba(99,102,241,0.25)' : '#a78bfa'}`,
+          borderRadius: 12, padding: '10px 12px', marginBottom: 8,
+        }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: isDark ? '#a78bfa' : '#6d28d9', marginBottom: 6 }}>
+            💡 יום {daysSinceOnboarding + 1} — שאלות נפוצות של הורים חדשים:
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {[
+              daysSinceOnboarding <= 1 && "איך להסביר לילדים על האפליקציה?",
+              daysSinceOnboarding <= 2 && "כמה משימות לתת בהתחלה?",
+              daysSinceOnboarding >= 2 && "הילד/ה לא מסמנ/ת 'סיימתי'",
+              daysSinceOnboarding >= 3 && "איך לשלוח הודעה קולית מעודדת?",
+              daysSinceOnboarding >= 4 && "כדאי לבדוק את הדוחות?",
+              daysSinceOnboarding >= 5 && "איך לסכם את השבוע הראשון?",
+            ].filter(Boolean).map((q, i) => (
+              <button key={i} onClick={() => send(q)}
+                style={{ padding: '4px 8px', background: isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.12)', border: 'none', borderRadius: 10, fontSize: 10, color: isDark ? '#c4b5fd' : '#6366f1', cursor: 'pointer', fontWeight: 600 }}>
+                {q}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Chat */}
       <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '4px 2px' }}>

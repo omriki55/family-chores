@@ -1,6 +1,7 @@
 import { FAMILY, CH, DAYS, DEFAULT_BADGES, DEFAULT_CHALLENGES } from '../../constants.js';
 import { getHour, getToday } from '../../utils.js';
 import { t } from '../../i18n/index.js';
+import GuidanceBanner from '../GuidanceBanner.jsx';
 
 export default function HomeScreen({S,app}){
   const{user,isP,tasks,completions,cKey,wk,xp,streaks,goals,challenges,messages,swaps,
@@ -15,8 +16,15 @@ export default function HomeScreen({S,app}){
   const me=FAMILY[user];const today=getToday();
   const activeReminder=getActiveReminder();
 
+  const daysSinceOnboarding=app.getDaysSinceOnboarding?app.getDaysSinceOnboarding():-1;
+
   return(
     <>
+      {/* First week guidance banner (parents only) */}
+      {isP&&daysSinceOnboarding>=0&&daysSinceOnboarding<=6&&(
+        <GuidanceBanner daysSinceOnboarding={daysSinceOnboarding} setScreen={setScreen}/>
+      )}
+
       {/* Reminder banner */}
       {activeReminder&&!isP&&(
         <div style={{background:"linear-gradient(135deg,#f59e0b20,#f59e0b10)",border:"1px solid #f59e0b40",borderRadius:12,padding:12,marginBottom:10,display:"flex",alignItems:"center",gap:8}}>
@@ -87,18 +95,16 @@ export default function HomeScreen({S,app}){
         );
       })()}
 
-      {/* Wall teaser */}
-      {!isP&&(()=>{
-        const myMsgs=messages.filter(m=>m.to===user||m.to==="wall").sort((a,b)=>b.ts-a.ts);
-        const unread=myMsgs.filter(m=>m.from!==user&&(Date.now()-m.ts)<86400000).length;
-        if(myMsgs.length===0)return null;
+      {/* Voice messages card */}
+      {(()=>{
+        const voiceUnread=messages.filter(m=>m.type==="voice"&&(m.to==="all"||m.to===user)&&m.from!==user&&!m.listened).length;
         return(
-          <button onClick={()=>setScreen("wall")} style={{width:"100%",background:unread>0?"linear-gradient(135deg,#fef3c7,#fffbeb)":"var(--card)",borderRadius:12,padding:10,marginBottom:10,border:unread>0?"1px solid #f59e0b40":"1px solid var(--border)",cursor:"pointer",textAlign:"right"}}>
+          <button onClick={()=>setScreen("voice")} style={{width:"100%",background:voiceUnread>0?"linear-gradient(135deg,#fef3c7,#fffbeb)":isP?"linear-gradient(135deg,#ede9fe,#f5f3ff)":"var(--card)",borderRadius:12,padding:10,marginBottom:10,border:voiceUnread>0?"1px solid #f59e0b40":isP?"1px solid #a78bfa40":"1px solid var(--border)",cursor:"pointer",textAlign:"right"}}>
             <div style={{display:"flex",alignItems:"center",gap:6}}>
-              <span style={{fontSize:18}}>💬</span>
+              <span style={{fontSize:18}}>🎙️</span>
               <div style={{flex:1}}>
-                <div style={{fontSize:12,fontWeight:700,color:"var(--text)"}}>{t("home.familyWall")}{unread>0&&<span style={{color:"#f59e0b"}}> ({t("home.newMessages",{count:unread})})</span>}</div>
-                <div style={{fontSize:10,color:"var(--textSec)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{myMsgs[0]?.text?.slice(0,40)}</div>
+                <div style={{fontSize:12,fontWeight:700,color:"var(--text)"}}>הודעות קוליות{voiceUnread>0&&<span style={{color:"#f59e0b"}}> ({voiceUnread} חדשות)</span>}</div>
+                <div style={{fontSize:10,color:"var(--textSec)"}}>{isP?"שלחו הודעה קולית מעודדת לילדים":"שלח והאזן להודעות קוליות"}</div>
               </div>
               <span style={{color:"#6366f1",fontSize:10}}>←</span>
             </div>

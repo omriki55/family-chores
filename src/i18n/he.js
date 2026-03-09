@@ -19,10 +19,7 @@ export default {
 
   // ── Navigation / Tabs ──
   "nav.home": "בית",
-  "nav.wall": "הודעות",
-  "nav.cal": "לוח שנה",
-  "nav.meal": "ארוחות",
-  "nav.grocery": "קניות",
+  "nav.voice": "הודעות",
   "nav.tasks": "משימות",
   "nav.badges": "הישגים",
   "nav.rewards": "פרסים",
@@ -76,8 +73,6 @@ export default {
   "home.enableNotifications": "אפשר התראות לתזכורות",
   "home.enable": "אפשר",
   "home.whereNow": "📍 מי איפה עכשיו?",
-  "home.familyWall": "קיר משפחתי",
-  "home.newMessages": "{count} חדשות",
   "home.todayProgress": "📋 היום",
   "home.allTasksDone": "🎉 כל המשימות בוצעו!",
   "home.viewAllTasks": "צפה בכל המשימות →",
@@ -235,7 +230,7 @@ export default {
   "manage.importSuccess": "✅ ייבוא הושלם! טוען מחדש...",
   "manage.invalidFile": "❌ קובץ לא תקין",
   "manage.tip": "💡 טיפ",
-  "manage.tipText": "מומלץ לגבות לפני שינויים גדולים. הקובץ כולל: משימות, השלמות, ציונים, XP, אירועים, רשימת קניות, הודעות ועוד.",
+  "manage.tipText": "מומלץ לגבות לפני שינויים גדולים. הקובץ כולל: משימות, השלמות, ציונים, XP, הודעות ועוד.",
 
   // Manage — Log
   "manage.auditLog": "📜 יומן פעולות",
@@ -252,19 +247,6 @@ export default {
   "badges.gallery": "📸 גלריית הישגים →",
   "badges.penaltyHistory": "⚠️ היסטוריית קנסות",
   "badges.penalty": "קנס",
-
-  // ── Wall Screen ──
-  "wall.messages": "💬 הודעות",
-  "wall.photos": "📸 תמונות",
-  "wall.title": "💬 קיר משפחתי",
-  "wall.photoTitle": "📸 גלריית תמונות",
-  "wall.everyone": "👨‍👩‍👧‍👦 כולם",
-  "wall.writeMessage": "כתוב/י הודעה...",
-  "wall.writeToParents": "כתוב/י להורים...",
-  "wall.noMessages": "עדיין אין הודעות. כתבו משהו!",
-  "wall.noPhotos": "עדיין אין תמונות. סמנו משימות עם תמונה!",
-  "wall.systemUser": "🤖 מערכת",
-  "wall.sent": "💬 נשלח!",
 
   // ── Profile Screen ──
   "profile.back": "← חזרה",
@@ -355,7 +337,6 @@ export default {
   "toast.templateApplied": "📋 תבנית הוחלה!",
   "toast.templatesMerged": "📋 משימות מוזגו!",
   "toast.pinUpdated": "🔒 עודכן!",
-  "toast.calAdded": "📅 נוסף!",
   "toast.invalidScore": "⚠️ ציון לא תקין",
   "toast.scoreBelowMin": "⚠️ ציון מתחת ל-90, אין בונוס",
   "toast.describe": "⚠️ תאר/י",
@@ -364,12 +345,7 @@ export default {
   "toast.rewardPurchased": "🎁 {title} נרכש!",
   "toast.rewardFulfilled": "✅ פרס סופק!",
   "toast.alreadySent": "⏳ כבר נשלח לאחרונה",
-  "toast.groceryAdded": "🛒 נוסף!",
-  "toast.cleaned": "🧹 נוקה!",
-  "toast.missingProduct": "⚠️ חסר שם מוצר",
   "toast.missingName": "⚠️ חסר שם",
-  "toast.noEvents": "⚠️ לא נמצאו אירועים בקובץ",
-  "toast.eventsImported": "📅 יובאו {count} אירועים!",
   "toast.fourDigits": "⚠️ 4 ספרות",
 
   // ── Notifications ──
@@ -390,10 +366,9 @@ export default {
   "audit.swap_approved": "🔄 החלפה אושרה",
   "audit.swap_rejected": "❌ החלפה נדחתה",
   "audit.exam_added": "📝 מבחן",
-  "audit.cal_event_added": "📅 אירוע חדש",
-  "audit.cal_event_deleted": "🗑️ מחיקת אירוע",
   "audit.reward_purchased": "🎁 רכישת פרס",
   "audit.template_applied": "📄 החלת תבנית",
+  "audit.voice_message_sent": "🎙️ הודעה קולית",
   "audit.login": "🔑 כניסה",
 
   // ── Location ──
@@ -425,4 +400,25 @@ export default {
   "voice.notSupported": "הדפדפן לא תומך בהקלדה קולית",
   "voice.listening": "מקשיב...",
   "voice.tapToSpeak": "לחץ לדיבור",
+
+  // ── Voice Messages ──
+  "voiceMsg.title": "🎙️ הודעות קוליות",
+  "voiceMsg.record": "לחצו להקלטה",
+  "voiceMsg.recording": "מקליט...",
+  "voiceMsg.send": "שלח הודעה",
+  "voiceMsg.cancel": "ביטול",
+  "voiceMsg.noMessages": "אין הודעות עדיין",
+  "voiceMsg.unread": "{count} הודעות חדשות",
+  "voiceMsg.from": "מ{name}",
+  "voiceMsg.toAll": "לכל המשפחה",
+  "voiceMsg.listened": "נשמע",
+  "voiceMsg.new": "חדש",
+  "voiceMsg.selectRecipient": "בחרו נמען",
+  "voiceMsg.everyone": "כולם",
+  "voiceMsg.sent": "🎙️ הודעה נשלחה!",
+  "voiceMsg.micError": "⚠️ אין גישה למיקרופון",
+
+  // ── Guidance ──
+  "guidance.dayOf": "💡 יום {day} מתוך 7",
+  "guidance.askMichael": "💡 שאלו את מיכאל לעצות נוספות",
 };

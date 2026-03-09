@@ -4,7 +4,7 @@ import { FAMILY, DAYS } from '../../constants.js';
 export default function ApproveScreen({ S, app }) {
   const {
     tasks, completions, cKey,
-    approveWithPraise, reject, deleteTask,
+    approve, reject, deleteTask,
     setPhotoModal,
   } = app;
 
@@ -76,7 +76,7 @@ export default function ApproveScreen({ S, app }) {
               onTouchStart={(e)=>onTouchStart(swKey,e)}
               onTouchMove={(e)=>onTouchMove(swKey,e)}
               onTouchEnd={()=>onTouchEnd(swKey,
-                ()=>approveWithPraise(p.t.id,p.c,p.d),
+                ()=>approve(p.t.id,p.c,p.d),
                 ()=>{reject(p.t.id,p.c,p.d);if(p.t.bonus)deleteTask(p.t.id);}
               )}
               style={{background:"var(--card)",borderRadius:10,padding:10,border:`1px solid ${p.t.bonus?"#8b5cf630":"#f59e0b25"}`,
@@ -92,7 +92,7 @@ export default function ApproveScreen({ S, app }) {
                 {p.comp.photo&&<button onClick={()=>setPhotoModal({view:p.comp.photo})} style={S.vBtn}>🖼</button>}
               </div>
               <div style={{display:"flex",gap:5}}>
-                <button onClick={()=>approveWithPraise(p.t.id,p.c,p.d)} style={S.bOk}>✅ אשר</button>
+                <button onClick={()=>approve(p.t.id,p.c,p.d)} style={S.bOk}>✅ אשר</button>
                 <button onClick={()=>{reject(p.t.id,p.c,p.d);if(p.t.bonus)deleteTask(p.t.id);}} style={S.bNo}>❌</button>
               </div>
             </div>

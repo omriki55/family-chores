@@ -10,7 +10,7 @@
  * @returns {boolean}
  */
 export function isTaskForChild(task, cid, day, dateStr) {
-  if (!task.assignedTo.includes(cid)) return false;
+  if (!task.assignedTo || !task.assignedTo.includes(cid)) return false;
   if (task.bonus) return true;
   if (task.skippedDates && dateStr && task.skippedDates.includes(dateStr)) return false;
   if (task.activeDays) {
@@ -25,7 +25,7 @@ export function isTaskForChild(task, cid, day, dateStr) {
 }
 
 export function isRecurringTask(task) {
-  return !task.bonus && task.activeDays !== null && task.activeDays.length > 0 && task.activeDays.length < 7;
+  return !task.bonus && Array.isArray(task.activeDays) && task.activeDays.length > 0 && task.activeDays.length < 7;
 }
 
 /**

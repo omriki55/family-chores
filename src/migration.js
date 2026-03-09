@@ -12,8 +12,8 @@ import storage from './storage.firebase.js';
 const STORAGE_KEYS = [
   'tasks','completions','pins','xp','streaks','goals','swaps',
   'activeReminders','messages','penalties','earnedBadges','totalXpEarned',
-  'approvedCount','exams','calEvents','groceries','auditLog','challenges',
-  'lastSummaryWeek','locations'
+  'approvedCount','exams','auditLog','challenges',
+  'lastSummaryWeek','locations','onboardingDate'
 ];
 
 export async function migrateToFirestore() {
@@ -44,13 +44,7 @@ export async function migrateToFirestore() {
       console.log('Migrated family-config');
     }
 
-    // 3. Migrate meals & recipes
-    const meals = localStorage.getItem('family-meals');
-    if (meals) await storage.set('family-meals', meals);
-    const recipes = localStorage.getItem('family-recipes');
-    if (recipes) await storage.set('family-recipes', recipes);
-
-    // 4. Migrate context reminders
+    // 3. Migrate context reminders
     const reminders = localStorage.getItem('family-context-reminders');
     if (reminders) await storage.set('family-context-reminders', reminders);
 

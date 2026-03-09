@@ -19,10 +19,7 @@ export default {
 
   // ── Navigation / Tabs ──
   "nav.home": "Home",
-  "nav.wall": "Messages",
-  "nav.cal": "Calendar",
-  "nav.meal": "Meals",
-  "nav.grocery": "Groceries",
+  "nav.voice": "Messages",
   "nav.tasks": "Tasks",
   "nav.badges": "Badges",
   "nav.rewards": "Rewards",
@@ -76,8 +73,6 @@ export default {
   "home.enableNotifications": "Enable notifications for reminders",
   "home.enable": "Enable",
   "home.whereNow": "📍 Who's where now?",
-  "home.familyWall": "Family wall",
-  "home.newMessages": "{count} new",
   "home.todayProgress": "📋 Today",
   "home.allTasksDone": "🎉 All tasks completed!",
   "home.viewAllTasks": "View all tasks →",
@@ -235,7 +230,7 @@ export default {
   "manage.importSuccess": "✅ Import complete! Reloading...",
   "manage.invalidFile": "❌ Invalid file",
   "manage.tip": "💡 Tip",
-  "manage.tipText": "Backup recommended before big changes. File includes: tasks, completions, scores, XP, events, grocery list, messages and more.",
+  "manage.tipText": "Backup recommended before big changes. File includes: tasks, completions, scores, XP, messages and more.",
 
   // Manage — Log
   "manage.auditLog": "📜 Activity Log",
@@ -252,19 +247,6 @@ export default {
   "badges.gallery": "📸 Achievement Gallery →",
   "badges.penaltyHistory": "⚠️ Penalty History",
   "badges.penalty": "Penalty",
-
-  // ── Wall Screen ──
-  "wall.messages": "💬 Messages",
-  "wall.photos": "📸 Photos",
-  "wall.title": "💬 Family Wall",
-  "wall.photoTitle": "📸 Photo Gallery",
-  "wall.everyone": "👨‍👩‍👧‍👦 Everyone",
-  "wall.writeMessage": "Write a message...",
-  "wall.writeToParents": "Write to parents...",
-  "wall.noMessages": "No messages yet. Write something!",
-  "wall.noPhotos": "No photos yet. Mark tasks with photos!",
-  "wall.systemUser": "🤖 System",
-  "wall.sent": "💬 Sent!",
 
   // ── Profile Screen ──
   "profile.back": "← Back",
@@ -355,7 +337,6 @@ export default {
   "toast.templateApplied": "📋 Template applied!",
   "toast.templatesMerged": "📋 Tasks merged!",
   "toast.pinUpdated": "🔒 Updated!",
-  "toast.calAdded": "📅 Added!",
   "toast.invalidScore": "⚠️ Invalid score",
   "toast.scoreBelowMin": "⚠️ Score below 90, no bonus",
   "toast.describe": "⚠️ Describe it",
@@ -364,12 +345,7 @@ export default {
   "toast.rewardPurchased": "🎁 {title} purchased!",
   "toast.rewardFulfilled": "✅ Reward fulfilled!",
   "toast.alreadySent": "⏳ Already sent recently",
-  "toast.groceryAdded": "🛒 Added!",
-  "toast.cleaned": "🧹 Cleaned!",
-  "toast.missingProduct": "⚠️ Product name required",
   "toast.missingName": "⚠️ Name required",
-  "toast.noEvents": "⚠️ No events found in file",
-  "toast.eventsImported": "📅 Imported {count} events!",
   "toast.fourDigits": "⚠️ 4 digits required",
 
   // ── Notifications ──
@@ -390,10 +366,9 @@ export default {
   "audit.swap_approved": "🔄 Swap approved",
   "audit.swap_rejected": "❌ Swap rejected",
   "audit.exam_added": "📝 Exam",
-  "audit.cal_event_added": "📅 New event",
-  "audit.cal_event_deleted": "🗑️ Event deleted",
   "audit.reward_purchased": "🎁 Reward purchased",
   "audit.template_applied": "📄 Template applied",
+  "audit.voice_message_sent": "🎙️ Voice message",
   "audit.login": "🔑 Login",
 
   // ── Location ──
@@ -425,4 +400,25 @@ export default {
   "voice.notSupported": "Browser doesn't support voice input",
   "voice.listening": "Listening...",
   "voice.tapToSpeak": "Tap to speak",
+
+  // ── Voice Messages ──
+  "voiceMsg.title": "🎙️ Voice Messages",
+  "voiceMsg.record": "Tap to record",
+  "voiceMsg.recording": "Recording...",
+  "voiceMsg.send": "Send message",
+  "voiceMsg.cancel": "Cancel",
+  "voiceMsg.noMessages": "No messages yet",
+  "voiceMsg.unread": "{count} new messages",
+  "voiceMsg.from": "From {name}",
+  "voiceMsg.toAll": "To everyone",
+  "voiceMsg.listened": "Listened",
+  "voiceMsg.new": "New",
+  "voiceMsg.selectRecipient": "Select recipient",
+  "voiceMsg.everyone": "Everyone",
+  "voiceMsg.sent": "🎙️ Message sent!",
+  "voiceMsg.micError": "⚠️ No microphone access",
+
+  // ── Guidance ──
+  "guidance.dayOf": "💡 Day {day} of 7",
+  "guidance.askMichael": "💡 Ask Michael for more tips",
 };
