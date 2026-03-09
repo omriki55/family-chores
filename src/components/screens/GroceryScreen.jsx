@@ -1,4 +1,5 @@
 import { FAMILY, GROCERY_CATEGORIES } from '../../constants.js';
+import useVoiceInput from '../../hooks/useVoiceInput.js';
 
 export default function GroceryScreen({ S, app }) {
   const {
@@ -6,6 +7,7 @@ export default function GroceryScreen({ S, app }) {
     groceryRecurring, setGroceryRecurring,
     addGroceryItem, toggleGroceryBought, deleteGroceryItem, clearBoughtGroceries,
   } = app;
+  const voice = useVoiceInput();
 
   return (
     <>
@@ -14,6 +16,7 @@ export default function GroceryScreen({ S, app }) {
         <div style={{display:"flex",gap:6,marginBottom:6}}>
           <input style={{...S.inp,marginBottom:0,flex:1}} placeholder="מוצר חדש..." value={groceryInput}
             onChange={e=>setGroceryInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")addGroceryItem();}}/>
+          {voice.supported&&<button className={voice.listening?"mic-pulse":""} onClick={()=>voice.toggle((txt,final)=>{if(final)setGroceryInput(txt);})} style={{...S.micBtn,background:voice.listening?"#ef4444":"#6366f115",color:voice.listening?"#fff":"#6366f1"}}>{voice.listening?"⏹️":"🎙️"}</button>}
           <button onClick={addGroceryItem}
             style={{padding:"8px 14px",background:"linear-gradient(135deg,#10b981,#059669)",border:"none",borderRadius:8,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>+ הוסף</button>
         </div>

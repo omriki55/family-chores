@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { FAMILY, CH, SUGGESTED, REMINDERS, AUDIT_LABELS, DS, RECURRENCE_PRESETS, DEFAULT_CHALLENGES } from '../../constants.js';
 import { t, getLang } from '../../i18n/index.js';
+import useVoiceInput from '../../hooks/useVoiceInput.js';
 
 const CONTEXT_REMINDER_PRESETS = [
   {icon:"⚽",text:"אל תשכח ציוד לכדורגל!"},
@@ -42,6 +43,7 @@ export default function ManageScreen({ S, app }) {
     // i18n
     lang, setLang,
   } = app;
+  const voice = useVoiceInput();
   const saveContextReminders = (r) => { setContextReminders(r); localStorage.setItem('family-context-reminders', JSON.stringify(r)); };
   const importFileRef = useRef(null);
   const [importing, setImporting] = useState(false);
@@ -252,7 +254,10 @@ export default function ManageScreen({ S, app }) {
 
       {manageSub==="add"&&(
         <div style={{background:"var(--card)",borderRadius:12,padding:14,border:"1px solid var(--border)"}}>
-          <input style={S.inp} placeholder="שם המשימה" value={newTask.title} onChange={e=>setNewTask({...newTask,title:e.target.value})}/>
+          <div style={{display:"flex",gap:6,marginBottom:8}}>
+            <input style={{...S.inp,marginBottom:0,flex:1}} placeholder="שם המשימה" value={newTask.title} onChange={e=>setNewTask({...newTask,title:e.target.value})}/>
+            {voice.supported&&<button className={voice.listening?"mic-pulse":""} onClick={()=>voice.toggle((txt,final)=>{if(final)setNewTask(t=>({...t,title:txt}));})} style={{...S.micBtn,background:voice.listening?"#ef4444":"#6366f115",color:voice.listening?"#fff":"#6366f1"}}>{voice.listening?"⏹️":"🎙️"}</button>}
+          </div>
           <div style={{display:"flex",gap:4,alignItems:"center",marginBottom:8}}>
             <span style={{fontSize:10,color:"var(--textSec)"}}>משקל:</span>
             <button onClick={()=>setNewTask({...newTask,weight:Math.max(1,newTask.weight-1)})} style={S.wB}>−</button>
@@ -503,6 +508,7 @@ export default function ManageScreen({ S, app }) {
             </div>
             <div style={{display:"flex",gap:6}}>
               <input value={newRemLabel} onChange={e=>setNewRemLabel(e.target.value)} placeholder="תיאור (למשל: שיעורי בית)" style={{...S.inp,marginBottom:0,flex:1}}/>
+              {voice.supported&&<button className={voice.listening?"mic-pulse":""} onClick={()=>voice.toggle((txt,final)=>{if(final)setNewRemLabel(txt);})} style={{...S.micBtn,background:voice.listening?"#ef4444":"#6366f115",color:voice.listening?"#fff":"#6366f1"}}>{voice.listening?"⏹️":"🎙️"}</button>}
               <button onClick={()=>{addChildReminder(newRemChild,{time:newRemTime,label:newRemLabel||"תזכורת"});setNewRemLabel('');}}
                 style={{padding:"6px 10px",background:"#6366f1",border:"none",borderRadius:7,color:"#fff",fontSize:10,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>+ הוסף</button>
             </div>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { FAMILY, CH } from '../../constants.js';
 import { getToday } from '../../utils.js';
+import useVoiceInput from '../../hooks/useVoiceInput.js';
 
 export default function WallScreen({ S, app }) {
   const {
@@ -10,6 +11,7 @@ export default function WallScreen({ S, app }) {
     setPhotoModal,
   } = app;
 
+  const voice = useVoiceInput();
   const [wallMode, setWallMode] = useState('messages');
 
   // ── Photo feed from completions ──
@@ -64,6 +66,7 @@ export default function WallScreen({ S, app }) {
           </div>}
           <div style={{display:"flex",gap:6}}>
             <input style={{...S.inp,marginBottom:0,flex:1}} placeholder={isP?"כתוב/י הודעה...":"כתוב/י להורים..."} value={wallText} onChange={e=>setWallText(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")sendWallMessage(wallText,isP?wallTo:"wall");}}/>
+            {voice.supported&&<button className={voice.listening?"mic-pulse":""} onClick={()=>voice.toggle((txt,final)=>{if(final)setWallText(prev=>prev?prev+" "+txt:txt);})} style={{...S.micBtn,background:voice.listening?"#ef4444":"#6366f115",color:voice.listening?"#fff":"#6366f1"}}>{voice.listening?"⏹️":"🎙️"}</button>}
             <button onClick={()=>sendWallMessage(wallText,isP?wallTo:"wall")} style={{padding:"8px 14px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",border:"none",borderRadius:8,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>שלח</button>
           </div>
         </div>

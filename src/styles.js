@@ -61,5 +61,6 @@ const S={
   rpHeatCell:{width:"100%",aspectRatio:"1",borderRadius:2,minWidth:0},
   rpHeatGrid:{display:"grid",gridTemplateColumns:"28px repeat(24,1fr)",gap:1,fontSize:7},
   rpAchieve:{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid #f1f5f9"},
+  micBtn:{minWidth:34,height:34,border:"none",borderRadius:9,fontSize:15,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.2s"},
 };
 export default S;

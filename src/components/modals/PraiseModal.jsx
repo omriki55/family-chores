@@ -1,8 +1,10 @@
 import React from "react";
 import { FAMILY } from "../../constants.js";
+import useVoiceInput from '../../hooks/useVoiceInput.js';
 
 export default function PraiseModal({ S, app }) {
   const { praiseModal, setPraiseModal, praiseText, setPraiseText, praiseStar, setPraiseStar, submitPraise, approve, tasks } = app;
+  const voice = useVoiceInput();
   if (!praiseModal) return null;
 
   return (
@@ -12,7 +14,10 @@ export default function PraiseModal({ S, app }) {
         <p style={{ color: "var(--textTer)", fontSize: 11, textAlign: "center", margin: "0 0 10px" }}>
           {tasks.find(t => t.id === praiseModal.taskId)?.icon} {tasks.find(t => t.id === praiseModal.taskId)?.title}
         </p>
-        <input style={S.inp} placeholder="כתוב/י מילה טובה..." value={praiseText} onChange={e => setPraiseText(e.target.value)} />
+        <div style={{display:"flex",gap:6,marginBottom:8}}>
+          <input style={{...S.inp,marginBottom:0,flex:1}} placeholder="כתוב/י מילה טובה..." value={praiseText} onChange={e => setPraiseText(e.target.value)} />
+          {voice.supported&&<button className={voice.listening?"mic-pulse":""} onClick={()=>voice.toggle((txt,final)=>{if(final)setPraiseText(prev=>prev?prev+" "+txt:txt);})} style={{...S.micBtn,background:voice.listening?"#ef4444":"#6366f115",color:voice.listening?"#fff":"#6366f1"}}>{voice.listening?"⏹️":"🎙️"}</button>}
+        </div>
         <div style={{ display: "flex", gap: 6, marginBottom: 10, justifyContent: "center" }}>
           {["⭐", "🌟", "💪", "🏆", "❤️", "👏"].map(s => (
             <button key={s} onClick={() => setPraiseStar(praiseStar === s ? null : s)}

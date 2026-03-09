@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { FAMILY } from '../../constants.js';
+import useVoiceInput from '../../hooks/useVoiceInput.js';
 
 const COUNSELOR_NAME = "מיכאל";
 const COUNSELOR_EMOJI = "🧑‍💼";
@@ -111,6 +112,7 @@ export default function CounselorScreen({ S, app }) {
   const [aiError, setAiError] = useState(false);
   const endRef = useRef(null);
   const inputRef = useRef(null);
+  const voice = useVoiceInput();
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -281,6 +283,7 @@ export default function CounselorScreen({ S, app }) {
           rows={2}
           style={{ flex: 1, padding: '8px 12px', background: inputBg, border: `1px solid ${inputBorder}`, borderRadius: 12, color: inputColor, fontSize: 12, outline: 'none', resize: 'none', direction: 'rtl', fontFamily: 'inherit', lineHeight: 1.5 }}
         />
+        {voice.supported&&<button className={voice.listening?"mic-pulse":""} onClick={()=>voice.toggle((txt,final)=>{if(final)setInput(prev=>prev?prev+" "+txt:txt);})} style={{...S.micBtn,background:voice.listening?"#ef4444":"#6366f115",color:voice.listening?"#fff":"#6366f1"}}>{voice.listening?"⏹️":"🎙️"}</button>}
         <button onClick={() => send()}
           disabled={typing}
           style={{ width: 44, height: 44, borderRadius: 12, background: input.trim() && !typing ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : (isDark ? '#334155' : '#e2e8f0'), border: 'none', color: '#fff', fontSize: 18, cursor: input.trim() && !typing ? 'pointer' : 'default', alignSelf: 'flex-end', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', opacity: typing ? 0.6 : 1 }}>

@@ -420,4 +420,9 @@ export default {
   "misc.xp": "XP",
   "misc.approvedBy": "✅",
   "misc.pending": "⏳",
+
+  // ── Voice Input ──
+  "voice.notSupported": "הדפדפן לא תומך בהקלדה קולית",
+  "voice.listening": "מקשיב...",
+  "voice.tapToSpeak": "לחץ לדיבור",
 };

@@ -420,4 +420,9 @@ export default {
   "misc.xp": "XP",
   "misc.approvedBy": "✅",
   "misc.pending": "⏳",
+
+  // ── Voice Input ──
+  "voice.notSupported": "Browser doesn't support voice input",
+  "voice.listening": "Listening...",
+  "voice.tapToSpeak": "Tap to speak",
 };

@@ -1,14 +1,19 @@
 import React from "react";
+import useVoiceInput from '../../hooks/useVoiceInput.js';
 
 export default function BonusModal({ S, app }) {
   const { bonusModal, setBonusModal, bonusTitle, setBonusTitle, bonusIcon, setBonusIcon, bonusFileRef, bonusPhoto, setBonusPhoto, handleBonusPhoto, submitBonus, isP } = app;
+  const voice = useVoiceInput();
   if (!bonusModal || isP) return null;
 
   return (
     <div style={S.ov} onClick={() => setBonusModal(false)}>
       <div style={S.md} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="הגשת יוזמה">
         <h3 style={S.mt}>⭐ יוזמה</h3>
-        <input style={S.inp} placeholder="מה עשית?" value={bonusTitle} onChange={e => setBonusTitle(e.target.value)} />
+        <div style={{display:"flex",gap:6,marginBottom:8}}>
+          <input style={{...S.inp,marginBottom:0,flex:1}} placeholder="מה עשית?" value={bonusTitle} onChange={e => setBonusTitle(e.target.value)} />
+          {voice.supported&&<button className={voice.listening?"mic-pulse":""} onClick={()=>voice.toggle((txt,final)=>{if(final)setBonusTitle(txt);})} style={{...S.micBtn,background:voice.listening?"#ef4444":"#6366f115",color:voice.listening?"#fff":"#6366f1"}}>{voice.listening?"⏹️":"🎙️"}</button>}
+        </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 8 }}>
           {["⭐", "💪", "🧹", "🍳", "🌟", "🎨", "📖", "🏃", "🛠️", "❤️", "🤝", "🌈"].map(em => (
             <button key={em} onClick={() => setBonusIcon(em)}
